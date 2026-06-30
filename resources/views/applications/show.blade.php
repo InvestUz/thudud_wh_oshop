@@ -156,7 +156,15 @@
                         <article class="info-card map-card">
                             <div class="map-toolbar">
                                 <div><strong><i class="fa-solid fa-layer-group"></i> Hybrid харита</strong><span id="drawHint">Майдон чегарасини чизинг ёки таҳрирланг</span></div>
-                                <button type="button" class="btn btn-outline btn-sm" id="clearDraw"><i class="fa-solid fa-eraser"></i> Тозалаш</button>
+                                <span class="map-action-status" id="mapActionStatus">Тайёр</span>
+                            </div>
+                            <div class="map-actionbar" aria-label="Харита бошқаруви">
+                                <button type="button" class="map-action-btn primary" id="startDraw"><i class="fa-solid fa-draw-polygon"></i><span>Чизиш</span></button>
+                                <button type="button" class="map-action-btn" id="finishDraw" disabled><i class="fa-solid fa-check"></i><span>Якунлаш</span></button>
+                                <button type="button" class="map-action-btn" id="findLocation"><i class="fa-solid fa-location-crosshairs"></i><span>Жойлашувни топ</span></button>
+                                <button type="button" class="map-action-btn" id="undoPoint" disabled><i class="fa-solid fa-rotate-left"></i><span>Охирги нуқта</span></button>
+                                <button type="button" class="map-action-btn" id="showArea"><i class="fa-solid fa-expand"></i><span>Кўрсатиш</span></button>
+                                <button type="button" class="map-action-btn danger" id="clearDraw"><i class="fa-solid fa-trash-can"></i><span>Тозалаш</span></button>
                             </div>
                             <div class="map-edit" id="drawMap" data-lat="{{ $mapLat }}" data-lng="{{ $mapLng }}" data-geo='@json(old('geo_area', $latestSurvey?->geo_area))'></div>
                             <input type="hidden" name="geo_area" id="geoArea" value="{{ old('geo_area', $latestSurvey?->geo_area ? json_encode($latestSurvey->geo_area) : '') }}">
@@ -339,6 +347,15 @@
         .map-toolbar { display:flex; justify-content:space-between; align-items:center; gap:15px; padding:13px 16px; border-bottom:1px solid var(--line); }
         .map-toolbar strong, .map-toolbar span { display:block; }
         .map-toolbar span { color:var(--muted); font-size:11px; margin-top:2px; }
+        .map-toolbar .map-action-status { display:inline-flex; align-items:center; min-height:27px; padding:4px 9px; border-radius:999px; background:#eef2f4; color:#64748b; font-size:10px; font-weight:700; white-space:nowrap; }
+        .map-toolbar .map-action-status.active { color:var(--teal-dark); background:var(--teal-light); }
+        .map-actionbar { display:flex; align-items:center; gap:7px; padding:10px 12px; border-bottom:1px solid var(--line); background:#f8fafb; overflow-x:auto; scrollbar-width:thin; }
+        .map-action-btn { min-height:37px; display:inline-flex; align-items:center; justify-content:center; gap:7px; padding:8px 12px; border:1px solid #d8e0e4; border-radius:9px; background:#fff; color:#334155; font:inherit; font-size:12px; font-weight:750; white-space:nowrap; cursor:pointer; transition:.14s ease; }
+        .map-action-btn:hover:not(:disabled) { border-color:var(--teal); color:var(--teal-dark); transform:translateY(-1px); box-shadow:0 3px 9px rgba(15,123,123,.10); }
+        .map-action-btn.primary { background:var(--teal); border-color:var(--teal); color:#fff; }
+        .map-action-btn.primary.active { background:#084f4f; box-shadow:0 0 0 3px rgba(15,123,123,.16); }
+        .map-action-btn.danger { color:#c0392b; }
+        .map-action-btn:disabled { opacity:.42; cursor:not-allowed; }
         .map-edit { height:430px; background:#dce6ea; }
         .leaflet-container { font:inherit; }
         .total-area { color:var(--teal-dark)!important; background:var(--teal-light)!important; font-weight:800; font-size:17px!important; }
@@ -417,20 +434,93 @@
             const map = L.map(drawEl, { zoomControl:true }).setView([parseFloat(drawEl.dataset.lat), parseFloat(drawEl.dataset.lng)], 18);
             addBaseControl(map, baseLayers());
             const drawn = new L.FeatureGroup().addTo(map);
-            map.addControl(new L.Control.Draw({ draw:{ polygon:{shapeOptions:{color:'#0f7b7b',weight:3}}, rectangle:{shapeOptions:{color:'#0f7b7b',weight:3}}, polyline:false,circle:false,marker:false,circlemarker:false }, edit:{featureGroup:drawn} }));
+            const polygonDrawer = new L.Draw.Polygon(map, {
+                allowIntersection:false,
+                showArea:true,
+                shapeOptions:{color:'#0f7b7b',weight:3,fillOpacity:.28}
+            });
+            let locationMarker = null;
+            const startButton = document.getElementById('startDraw');
+            const finishButton = document.getElementById('finishDraw');
+            const undoButton = document.getElementById('undoPoint');
+            const actionStatus = document.getElementById('mapActionStatus');
+            const setDrawingState = active => {
+                startButton?.classList.toggle('active', active);
+                if (finishButton) finishButton.disabled = !active;
+                if (undoButton) undoButton.disabled = !active;
+                if (actionStatus) {
+                    actionStatus.textContent = active ? 'Чизиш режими' : 'Тайёр';
+                    actionStatus.classList.toggle('active', active);
+                }
+            };
+            const setMapMessage = message => {
+                const hint = document.getElementById('drawHint');
+                if (hint) hint.textContent = message;
+            };
             const syncGeometry = () => {
                 const data = drawn.toGeoJSON();
-                const hint = document.getElementById('drawHint');
-                if (!data.features.length) { document.getElementById('geoArea').value=''; hint.textContent='Майдон чегарасини чизинг ёки таҳрирланг'; return; }
+                if (!data.features.length) { document.getElementById('geoArea').value=''; setMapMessage('Майдон чегарасини чизинг ёки таҳрирланг'); return; }
                 document.getElementById('geoArea').value = JSON.stringify(data.features[0].geometry);
                 const center = drawn.getBounds().getCenter();
                 document.getElementById('latInput').value = center.lat.toFixed(7);
                 document.getElementById('lngInput').value = center.lng.toFixed(7);
-                hint.textContent = 'Майдон белгиланди ✓';
+                setMapMessage('Майдон белгиланди ✓');
             };
-            map.on(L.Draw.Event.CREATED, event => { drawn.clearLayers(); drawn.addLayer(event.layer); syncGeometry(); });
-            map.on(L.Draw.Event.EDITED, syncGeometry); map.on(L.Draw.Event.DELETED, syncGeometry);
-            document.getElementById('clearDraw')?.addEventListener('click', () => { drawn.clearLayers(); syncGeometry(); });
+            map.on(L.Draw.Event.DRAWSTART, () => setDrawingState(true));
+            map.on(L.Draw.Event.DRAWSTOP, () => setDrawingState(false));
+            map.on(L.Draw.Event.DRAWVERTEX, () => setMapMessage('Кейинги нуқтани белгиланг ёки «Якунлаш»ни босинг'));
+            map.on(L.Draw.Event.CREATED, event => { drawn.clearLayers(); drawn.addLayer(event.layer); syncGeometry(); map.fitBounds(drawn.getBounds(), {padding:[35,35],maxZoom:19}); });
+
+            startButton?.addEventListener('click', () => {
+                if (polygonDrawer.enabled()) return;
+                if (drawn.getLayers().length) drawn.clearLayers();
+                syncGeometry();
+                polygonDrawer.enable();
+                setMapMessage('Харитада камида 3 та нуқтани белгиланг');
+            });
+            finishButton?.addEventListener('click', () => {
+                if (polygonDrawer.enabled()) polygonDrawer.completeShape();
+            });
+            undoButton?.addEventListener('click', () => {
+                if (polygonDrawer.enabled()) {
+                    polygonDrawer.deleteLastVertex();
+                    setMapMessage('Охирги нуқта олиб ташланди');
+                }
+            });
+            document.getElementById('findLocation')?.addEventListener('click', () => {
+                setMapMessage('Жойлашув аниқланмоқда...');
+                map.locate({setView:true,maxZoom:19,enableHighAccuracy:true,timeout:12000});
+            });
+            map.on('locationfound', event => {
+                if (locationMarker) locationMarker.remove();
+                locationMarker = L.circleMarker(event.latlng, {radius:8,color:'#fff',weight:3,fillColor:'#0f7b7b',fillOpacity:1})
+                    .addTo(map).bindTooltip('Сизнинг жойлашувингиз').openTooltip();
+                if (!drawn.getLayers().length) {
+                    document.getElementById('latInput').value = event.latitude.toFixed(7);
+                    document.getElementById('lngInput').value = event.longitude.toFixed(7);
+                }
+                setMapMessage('Жойлашув топилди ✓');
+            });
+            map.on('locationerror', () => setMapMessage('Жойлашувни аниқлаб бўлмади. Браузер рухсатини текширинг.'));
+            document.getElementById('showArea')?.addEventListener('click', () => {
+                if (drawn.getLayers().length) {
+                    map.fitBounds(drawn.getBounds(), {padding:[45,45],maxZoom:19});
+                    setMapMessage('Белгиланган майдон кўрсатилди');
+                } else if (locationMarker) {
+                    map.setView(locationMarker.getLatLng(), 19);
+                    setMapMessage('Жорий жойлашув кўрсатилди');
+                } else {
+                    map.setView([parseFloat(drawEl.dataset.lat), parseFloat(drawEl.dataset.lng)], 18);
+                    setMapMessage('Бошланғич жойлашув кўрсатилди');
+                }
+            });
+            document.getElementById('clearDraw')?.addEventListener('click', () => {
+                if (polygonDrawer.enabled()) polygonDrawer.disable();
+                drawn.clearLayers();
+                if (locationMarker) { locationMarker.remove(); locationMarker = null; }
+                syncGeometry();
+                setDrawingState(false);
+            });
             const existing = document.getElementById('geoArea').value;
             if (existing) try { const layer=L.geoJSON({type:'Feature',geometry:JSON.parse(existing)},{style:{color:'#0f7b7b',weight:3,fillOpacity:.28}}); layer.eachLayer(item=>drawn.addLayer(item)); map.fitBounds(drawn.getBounds(),{maxZoom:19}); } catch (_) {}
         }
