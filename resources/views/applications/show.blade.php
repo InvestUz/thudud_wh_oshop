@@ -354,11 +354,13 @@
         .map-action-btn:hover:not(:disabled) { border-color:var(--teal); color:var(--teal-dark); transform:translateY(-1px); box-shadow:0 3px 9px rgba(15,123,123,.10); }
         .map-action-btn.primary { background:var(--teal); border-color:var(--teal); color:#fff; }
         .map-action-btn.primary.active { background:#084f4f; box-shadow:0 0 0 3px rgba(15,123,123,.16); }
-        .map-action-btn.draw-attention { position:relative; isolation:isolate; animation:drawButtonPulse 1.65s ease-in-out infinite; }
-        .map-action-btn.draw-attention::after { content:""; position:absolute; inset:-5px; z-index:-1; border:2px solid rgba(15,123,123,.52); border-radius:13px; animation:drawButtonRing 1.65s ease-out infinite; pointer-events:none; }
-        @keyframes drawButtonPulse { 0%,100%{transform:scale(1);box-shadow:0 3px 9px rgba(15,123,123,.12)} 45%{transform:scale(1.075);box-shadow:0 7px 20px rgba(15,123,123,.32)} }
-        @keyframes drawButtonRing { 0%{opacity:.8;transform:scale(.9)} 70%,100%{opacity:0;transform:scale(1.18)} }
-        @media (prefers-reduced-motion:reduce) { .map-action-btn.draw-attention,.map-action-btn.draw-attention::after{animation:none} }
+        .map-action-btn.draw-attention { position:relative; isolation:isolate; }
+        .map-action-btn.draw-attention:not(.active) { animation:drawButtonGlow 1.35s ease-in-out infinite; }
+        .map-action-btn.draw-attention:not(.active)::after { content:""; position:absolute; inset:-5px; z-index:-1; border:2px solid rgba(20,184,166,.76); border-radius:13px; animation:drawButtonRing 1.35s ease-out infinite; pointer-events:none; }
+        .map-action-btn.draw-attention:not(.active) i { animation:drawIconSpark 1.35s ease-in-out infinite; }
+        @keyframes drawButtonGlow { 0%,100%{transform:scale(1);background:#0f7b7b;box-shadow:0 0 0 0 rgba(20,184,166,0),0 3px 8px rgba(15,123,123,.14)} 50%{transform:scale(1.09);background:#13a19d;box-shadow:0 0 10px 3px rgba(45,212,191,.72),0 8px 24px rgba(15,123,123,.48)} }
+        @keyframes drawButtonRing { 0%{opacity:.95;transform:scale(.92)} 75%,100%{opacity:0;transform:scale(1.28)} }
+        @keyframes drawIconSpark { 0%,100%{transform:rotate(0) scale(1);filter:brightness(1)} 50%{transform:rotate(-8deg) scale(1.22);filter:brightness(1.8) drop-shadow(0 0 4px #fff)} }
         .map-action-btn.danger { color:#c0392b; }
         .map-action-btn:disabled { opacity:.42; cursor:not-allowed; }
         .map-edit { height:430px; background:#dce6ea; }
@@ -408,6 +410,7 @@
         const tabs = [...document.querySelectorAll('.detail-tab')];
         const panels = [...document.querySelectorAll('.tab-panel')];
         const maps = [];
+        const focusSavedMap = @json((bool) session('focus_survey_map', false));
         const activateTab = name => {
             tabs.forEach(tab => tab.classList.toggle('active', tab.dataset.tab === name));
             panels.forEach(panel => panel.classList.toggle('active', panel.dataset.panel === name));
@@ -478,7 +481,6 @@
 
             startButton?.addEventListener('click', () => {
                 if (polygonDrawer.enabled()) return;
-                startButton.classList.remove('draw-attention');
                 if (drawn.getLayers().length) drawn.clearLayers();
                 syncGeometry();
                 polygonDrawer.enable();
@@ -528,7 +530,17 @@
                 setDrawingState(false);
             });
             const existing = document.getElementById('geoArea').value;
-            if (existing) try { const layer=L.geoJSON({type:'Feature',geometry:JSON.parse(existing)},{style:{color:'#0f7b7b',weight:3,fillOpacity:.28}}); layer.eachLayer(item=>drawn.addLayer(item)); map.fitBounds(drawn.getBounds(),{maxZoom:19}); startButton?.classList.remove('draw-attention'); } catch (_) {}
+            if (existing) try {
+                const layer=L.geoJSON({type:'Feature',geometry:JSON.parse(existing)},{style:{color:'#0f7b7b',weight:3,fillOpacity:.28}});
+                layer.eachLayer(item=>drawn.addLayer(item));
+                const focusPolygon = () => {
+                    map.invalidateSize();
+                    map.fitBounds(drawn.getBounds(), {padding:[65,65],maxZoom:20,animate:true,duration:.65});
+                    drawn.bringToFront();
+                    if (focusSavedMap) setMapMessage('Сақланган майдон яқинлаштириб кўрсатилди ✓');
+                };
+                setTimeout(focusPolygon, focusSavedMap ? 280 : 100);
+            } catch (_) {}
         }
 
         const viewEl = document.getElementById('surveyMap');

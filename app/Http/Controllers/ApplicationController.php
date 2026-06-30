@@ -296,8 +296,9 @@ class ApplicationController extends Controller
         }
 
         return redirect()
-            ->route('applications.show', $application)
-            ->with('status', $message);
+            ->to(route('applications.show', $application).'#survey')
+            ->with('status', $message)
+            ->with('focus_survey_map', true);
     }
 
     /**
