@@ -78,6 +78,9 @@
             </div>
         </header>
         <main class="content">
+            @if(request()->boolean('upload_error'))
+                <div class="alert alert-error">Файллар ҳажми жуда катта. Расмлар автоматик кичрайтирилади; битта ҳужжат 10 МБ, умумий юклама 128 МБ дан ошмаслиги керак.</div>
+            @endif
             @if(session('status'))
                 <div class="alert alert-success">{{ session('status') }}</div>
             @endif

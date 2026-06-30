@@ -63,21 +63,18 @@ Barcha parollar: **`password`**
 
 | Email | Rol | Vazifasi |
 |---|---|---|
-| `applicant@test.uz`  | Mulkdor              | Ariza yaratadi, o'z arizalari va shartnomalarini ko'radi |
+| `tadbirkor@test.uz`  | Tadbirkor            | Ariza yaratadi, o'z arizalari va shartnomalarini ko'radi |
 | `moderator@test.uz`  | Moderator            | Yangi arizani ko'radi → mas'ul xodimga uzatadi / bekor qiladi |
-| `officer@test.uz`    | Mas'ul xodim         | O'lchov (survey) to'ldiradi → ishchi guruhga uzatadi; xulosa yozib tasdiqlaydi |
-| `workgroup@test.uz`  | Ishchi guruh         | Izoh yozadi → keyingi bosqichga uzatadi / qaytaradi / bekor qiladi |
-| `deputy@test.uz`     | O'rinbosar           | Yakuniy tasdiqlash / bekor qilish; shartnoma nazorati |
-| `head@test.uz`       | Rahbar               | Zam rahbar bilan teng vakolat |
-| `lawyer@test.uz`     | Yurist               | Shartnomalarni kuzatadi, to'xtatadi, bekor qiladi (pipeline'da **yo'q**) |
-| `compliance@test.uz` | Komplayens           | Shartnomalarni monitoring qiladi, to'xtatadi (pipeline'da **yo'q**) |
+| `masul@test.uz`      | Mas'ul xodim         | O'lchov (survey) to'ldiradi va xulosa yozadi |
+| `orinbosar@test.uz`  | O'rinbosar           | Arizani ko'rib, rahbarga uzatadi |
+| `rahbar@test.uz`     | Rahbar               | Arizani tasdiqlab, tadbirkor imzosiga yuboradi |
 
 Qo'shimcha mulkdorlar: `applicant1@test.uz` … `applicant8@test.uz` (parol `password`).
 
 > Eslatma — hududiy filtr:
-> - **`officer@test.uz` (mas'ul xodim)** — **Mirzo-Ulug'bek tumani**ga biriktirilgan: faqat o'z tumani
+> - **`masul@test.uz` (mas'ul xodim)** — **Mirzo-Ulug'bek tumani**ga biriktirilgan: faqat o'z tumani
 >   arizalarini ko'radi (hududiy filtr namunasi).
-> - **Boshqa xodimlar** (`moderator`, `workgroup`, `deputy`, `head`, `lawyer`, `compliance`) — respublika
+> - **Boshqa xodimlar** (`moderator`, `orinbosar`, `rahbar`) — respublika
 >   darajasida (`district_id = null`): barcha tumanlarni ko'radi. Shuning uchun ochiq formadan **istalgan
 >   shahar/tumanni** tanlab yuborsangiz ham, ariza moderator panelida paydo bo'ladi.
 >

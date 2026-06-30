@@ -5,493 +5,376 @@
 @php
     use App\Enums\ApplicationStage;
     use App\Enums\RoleType;
-    use App\Enums\TransitionAction;
-    $btnClass = ['teal'=>'btn-teal','green'=>'btn-green','amber'=>'btn-amber','red'=>'btn-red'];
 
-    // Tarix uchun voqealarni xronologik birlashtirish: yaratilish + survey'lar + o'tishlar
-    $events = collect();
-    $events->push(['at' => $application->created_at, 'type' => 'created']);
-    foreach ($application->surveys as $sv) {
-        $events->push(['at' => $sv->created_at, 'type' => 'survey', 'survey' => $sv]);
+    $btnClass = ['teal' => 'btn-teal', 'green' => 'btn-green', 'amber' => 'btn-amber', 'red' => 'btn-red'];
+    $events = collect([['at' => $application->created_at, 'type' => 'created']]);
+    foreach ($application->surveys as $survey) {
+        $events->push(['at' => $survey->created_at, 'type' => 'survey', 'survey' => $survey]);
     }
-    foreach ($application->transitions as $tr) {
-        $events->push(['at' => $tr->created_at, 'type' => 'transition', 'tr' => $tr]);
+    foreach ($application->transitions as $transition) {
+        $events->push(['at' => $transition->created_at, 'type' => 'transition', 'transition' => $transition]);
     }
     $events = $events->sortBy('at')->values();
 
-    // Mas'ul xodim va o'rinbosar yozgan xulosalar (rahbariyat uchun) —
-    // shu bosqichlardan chiqishda yozilgan izohlar.
     $conclusionStages = [
-        ApplicationStage::ResponsibleReview->value => "Мас'ул ходим хулосаси",
+        ApplicationStage::ResponsibleReview->value => "Масъул ходим хулосаси",
         ApplicationStage::DeputyReview->value => 'Ўринбосар хулосаси',
     ];
     $conclusions = $application->transitions
-        ->filter(fn ($t) => $t->from_stage && array_key_exists($t->from_stage->value, $conclusionStages));
-
+        ->filter(fn ($transition) => $transition->from_stage
+            && array_key_exists($transition->from_stage->value, $conclusionStages));
     $viewerRole = auth()->user()->roleType();
     $isLeadership = in_array($viewerRole, [RoleType::DeputyHead, RoleType::Head], true);
+    $fileCount = count($latestSurvey?->photos ?? []) + count($latestSurvey?->documents ?? []);
+    $mapLat = old('latitude', $latestSurvey?->latitude ?: 41.311081);
+    $mapLng = old('longitude', $latestSurvey?->longitude ?: 69.279737);
 @endphp
 
 @section('content')
-    <div class="page-head">
-        <div class="flex items-center gap-12 wrap">
-            <span class="mono" style="font-size:18px;font-weight:800">{{ $application->application_number }}</span>
-            <x-badge :color="$application->current_stage->color()" :label="$application->current_stage->label()" />
-            <x-badge :color="$application->status->color()" :label="$application->status->label()" />
-        </div>
-        <div class="flex items-center gap-8 wrap">
-            <button type="button" class="btn btn-outline btn-sm" onclick="openHistory()">
-                <i class="fa-solid fa-clock-rotate-left"></i> Ариза ҳаракати тарихи
-            </button>
-            <a href="{{ url()->previous() }}" class="btn btn-outline btn-sm">← Орқага</a>
-        </div>
-    </div>
-
-    {{-- Босқичлар оқими --}}
-    <div class="card mb-16">
-        <div class="card-body">
-            <div class="stage-flow">
-                @foreach(ApplicationStage::pipeline() as $i => $st)
-                    @php
-                        $cur = $application->current_stage;
-                        $isRejected = $cur === ApplicationStage::Rejected;
-                        $state = $st->order() < $cur->order() ? 'done' : ($st === $cur ? 'current' : '');
-                    @endphp
-                    @if($i > 0)<span class="arrow">→</span>@endif
-                    <span class="step {{ $state }}">{{ $st->label() }}</span>
-                @endforeach
-                @if($application->current_stage === ApplicationStage::Rejected)
-                    <span class="arrow">→</span>
-                    <span class="step reject">{{ ApplicationStage::Rejected->label() }}</span>
-                @endif
+    <div class="application-hero">
+        <div>
+            <div class="application-kicker">АРИЗА КАРТОЧКАСИ</div>
+            <div class="flex items-center gap-12 wrap">
+                <span class="application-number">{{ $application->application_number }}</span>
+                <x-badge :color="$application->current_stage->color()" :label="$application->current_stage->label()" />
+                <x-badge :color="$application->status->color()" :label="$application->status->label()" />
+            </div>
+            <div class="application-subtitle">
+                {{ $application->object?->company_name }} · {{ $application->district?->name }} · {{ optional($application->created_at)->format('d.m.Y') }}
             </div>
         </div>
+        <a href="{{ route('applications.index') }}" class="btn btn-outline"><i class="fa-solid fa-arrow-left"></i> Аризаларга қайтиш</a>
     </div>
 
-    <div class="grid-2">
-        {{-- Чап устун: маълумот + тарих --}}
-        <div>
-            <div class="card mb-16">
-                <div class="card-head"><h2>Объект ва ариза маълумотлари</h2></div>
-                <div class="card-body">
-                    <dl class="dl">
-                        <dt>Тадбиркор</dt><dd>{{ $application->applicant?->displayName() }}</dd>
-                        <dt>ПИНФЛ / СТИР</dt><dd class="mono">{{ $application->applicant?->pinfl ?: $application->object?->tin_pinfl ?: '—' }}</dd>
-                        <dt>Телефон</dt><dd>{{ $application->applicant?->phone ?: $application->object?->phone ?: '—' }}</dd>
-                        <dt>Фирма номи</dt><dd>{{ $application->object?->company_name }}</dd>
-                        <dt>Кадастр рақами</dt><dd class="mono">{{ $application->object?->cadastre_number }}</dd>
-                        <dt>Вилоят / Туман</dt><dd>{{ $application->region?->name }}, {{ $application->district?->name }}</dd>
-                        <dt>Маҳалла</dt><dd>{{ $application->object?->mahalla?->name ?: '—' }}</dd>
-                        <dt>Кўча / Манзил</dt><dd>{{ $application->object?->fullAddress() ?: '—' }}</dd>
-                    </dl>
+    <div class="stage-shell">
+        <div class="stage-flow">
+            @foreach(ApplicationStage::pipeline() as $index => $stage)
+                @php
+                    $current = $application->current_stage;
+                    $state = $stage->order() < $current->order() ? 'done' : ($stage === $current ? 'current' : '');
+                @endphp
+                @if($index > 0)<span class="arrow"><i class="fa-solid fa-chevron-right"></i></span>@endif
+                <span class="step {{ $state }}">
+                    @if($state === 'done')<i class="fa-solid fa-check"></i>@endif
+                    {{ $stage->label() }}
+                </span>
+            @endforeach
+            @if($application->current_stage === ApplicationStage::Rejected)
+                <span class="arrow"><i class="fa-solid fa-chevron-right"></i></span>
+                <span class="step reject">{{ ApplicationStage::Rejected->label() }}</span>
+            @endif
+        </div>
+    </div>
 
-                    <div class="divider"></div>
-                    <h2 style="font-size:14px;margin:0 0 10px">Туташ ҳудуд</h2>
-                    <table class="tbl">
-                        <thead><tr><th>Фаолият</th><th>Майдон (м²)</th><th>Иншоотлар</th></tr></thead>
-                        <tbody>
-                        @forelse($application->adjacentAreas as $a)
-                            <tr>
-                                <td>{{ $a->activity ?: '—' }}</td>
-                                <td class="num">{{ rtrim(rtrim(number_format((float)$a->area_m2,2,'.',' '),'0'),'.') }}</td>
-                                <td>{{ $a->structures ?: '—' }}</td>
-                            </tr>
-                        @empty
-                            <tr><td colspan="3" class="muted">—</td></tr>
-                        @endforelse
-                        </tbody>
-                    </table>
+    <div class="application-workspace">
+        <section class="application-main">
+            <nav class="detail-tabs" aria-label="Ариза бўлимлари">
+                <button type="button" class="detail-tab active" data-tab="overview"><i class="fa-regular fa-rectangle-list"></i> Умумий</button>
+                <button type="button" class="detail-tab" data-tab="survey"><i class="fa-solid fa-map-location-dot"></i> Ўлчов ва харита</button>
+                <button type="button" class="detail-tab" data-tab="files"><i class="fa-regular fa-folder-open"></i> Файллар <span class="tab-count">{{ $fileCount }}</span></button>
+                <button type="button" class="detail-tab" data-tab="history"><i class="fa-solid fa-clock-rotate-left"></i> Тарих <span class="tab-count">{{ $events->count() }}</span></button>
+            </nav>
 
-                    @if($latestSurvey)
-                        <div class="divider"></div>
-                        <h2 style="font-size:14px;margin:0 0 10px">Ўлчов натижалари (мас'ул ходим)</h2>
-                        <dl class="dl">
-                            <dt>А томони (узунлик)</dt><dd>{{ $latestSurvey->length_m ?? '—' }} м</dd>
-                            <dt>Б томони (эни)</dt><dd>{{ $latestSurvey->width_m ?? '—' }} м</dd>
-                            <dt>Умумий майдон</dt><dd><b>{{ $latestSurvey->total_area ?? '—' }} м²</b></dd>
-                            <dt>Фасад узунлиги</dt><dd>{{ $latestSurvey->facade_length_m ?? '—' }} м</dd>
-                            <dt>Йўлгача масофа</dt><dd>{{ $latestSurvey->distance_to_road_m ?? '—' }} м</dd>
-                            <dt>Кўча тури</dt><dd>{{ $latestSurvey->street_type ?? '—' }}</dd>
-                            <dt>Фойдаланиш мақсади</dt><dd>{{ $latestSurvey->usage_purpose ?? '—' }}</dd>
+            <div class="tab-panel active" data-panel="overview">
+                <div class="info-grid">
+                    <article class="info-card">
+                        <div class="section-title"><span class="section-icon"><i class="fa-solid fa-user-tie"></i></span><div><h2>Тадбиркор</h2><p>Ариза берувчи маълумотлари</p></div></div>
+                        <dl class="detail-list">
+                            <div><dt>Ф.И.Ш.</dt><dd>{{ $application->applicant?->displayName() }}</dd></div>
+                            <div><dt>ПИНФЛ / СТИР</dt><dd class="mono">{{ $application->applicant?->pinfl ?: $application->object?->tin_pinfl ?: '—' }}</dd></div>
+                            <div><dt>Телефон</dt><dd>{{ $application->applicant?->phone ?: $application->object?->phone ?: '—' }}</dd></div>
                         </dl>
+                    </article>
 
-                        @if(!empty($latestSurvey->photos))
-                            <div class="mt-16"><b class="tiny muted">Объект расмлари ({{ count($latestSurvey->photos) }})</b></div>
-                            <div class="photo-grid mt-8">
-                                @foreach($latestSurvey->photos as $photo)
-                                    <a href="{{ asset($photo) }}" target="_blank" class="photo-thumb" style="background-image:url('{{ asset($photo) }}')"></a>
-                                @endforeach
-                            </div>
-                        @endif
-
-                        @if(!empty($latestSurvey->documents))
-                            <div class="mt-16"><b class="tiny muted">Керакли ҳужжатлар ({{ count($latestSurvey->documents) }})</b></div>
-                            @include('partials.file-cards', ['files' => $latestSurvey->documents])
-                        @endif
-
-                        @if(!empty($latestSurvey->geo_area))
-                            <div class="mt-16"><b class="tiny muted"><i class="fa-solid fa-map-location-dot"></i> Ижарага олинаётган майдон (харитада)</b></div>
-                            <div class="map-view mt-8" id="surveyMap"
-                                 data-geo='@json($latestSurvey->geo_area)'
-                                 data-lat="{{ $latestSurvey->latitude }}" data-lng="{{ $latestSurvey->longitude }}"></div>
-                        @endif
-                    @endif
-
-                    @if($application->current_stage === ApplicationStage::AwaitingSignature && $application->isOwnedBy(auth()->user()))
-                        <div class="divider"></div>
-                        <div class="alert alert-info mb-0">
-                            <i class="fa-solid fa-pen-nib"></i> Раҳбар шартномани тасдиқлади. Илтимос, лойиҳани <b>«Кўриш»</b> орқали кўриб чиқинг ва пастдаги <b>«Шартномани имзолаш»</b> тугмаси билан имзоланг.
-                        </div>
-                    @endif
-
-                    @if($application->draft_document_path)
-                        <div class="divider"></div>
-                        <div class="flex items-center justify-between gap-12 wrap" style="padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:#f8fafa">
-                            <span><i class="fa-solid fa-file-word" style="color:#2b579a"></i> Шартнома лойиҳаси тайёр</span>
-                            <span class="flex items-center gap-8 wrap">
-                                <button type="button" class="btn btn-teal btn-sm" onclick="openDraft()"><i class="fa-solid fa-eye"></i> Кўриш</button>
-                                <a href="{{ asset($application->draft_document_path) }}" class="btn btn-outline btn-sm" download><i class="fa-solid fa-download"></i> Юклаб олиш (DOCX)</a>
-                            </span>
-                        </div>
-                    @endif
-
-                    @if($application->contract)
-                        <div class="divider"></div>
-                        <div class="alert alert-success mb-0 flex items-center justify-between">
-                            <span><i class="fa-solid fa-circle-check"></i> Шартнома тузилган: <b>{{ $application->contract->contract_number }}</b></span>
-                            <a href="{{ route('contracts.show', $application->contract) }}" class="btn btn-green btn-sm">Шартномани кўриш</a>
-                        </div>
-                    @endif
+                    <article class="info-card">
+                        <div class="section-title"><span class="section-icon"><i class="fa-solid fa-building"></i></span><div><h2>Объект</h2><p>Кадастр ва манзил маълумотлари</p></div></div>
+                        <dl class="detail-list">
+                            <div><dt>Ташкилот</dt><dd>{{ $application->object?->company_name }}</dd></div>
+                            <div><dt>Кадастр рақами</dt><dd class="mono">{{ $application->object?->cadastre_number }}</dd></div>
+                            <div><dt>Ҳудуд</dt><dd>{{ $application->region?->name }}, {{ $application->district?->name }}</dd></div>
+                            <div><dt>Маҳалла</dt><dd>{{ $application->object?->mahalla?->name ?: '—' }}</dd></div>
+                            <div><dt>Манзил</dt><dd>{{ $application->object?->fullAddress() ?: '—' }}</dd></div>
+                        </dl>
+                    </article>
                 </div>
-            </div>
 
-            @if($application->draft_document_path)
-            {{-- Шартнома лойиҳаси — "Кўриш" босилганда модалда (iframe) очилади, юклаб олинмайди --}}
-            <div class="modal-overlay" id="draftModal" style="display:none" onclick="if(event.target===this) closeDraft()">
-                <div class="modal-panel modal-panel-wide">
-                    <div class="modal-head">
-                        <h2><i class="fa-solid fa-file-contract"></i> Шартнома лойиҳаси</h2>
-                        <button type="button" class="modal-x" onclick="closeDraft()" title="Ёпиш"><i class="fa-solid fa-xmark"></i></button>
+                <article class="info-card mt-16">
+                    <div class="section-title"><span class="section-icon"><i class="fa-solid fa-vector-square"></i></span><div><h2>Туташ ҳудуд</h2><p>Фойдаланиш мақсади ва ажратилган майдон</p></div></div>
+                    <div class="metric-row">
+                        @forelse($application->adjacentAreas as $area)
+                            <div class="metric"><span>Фаолият</span><strong>{{ $area->activity ?: '—' }}</strong></div>
+                            <div class="metric accent"><span>Майдон</span><strong>{{ rtrim(rtrim(number_format((float) $area->area_m2, 2, '.', ' '), '0'), '.') }} м²</strong></div>
+                            <div class="metric"><span>Иншоотлар</span><strong>{{ $area->structures ?: '—' }}</strong></div>
+                        @empty
+                            <div class="empty">Маълумот киритилмаган</div>
+                        @endforelse
                     </div>
-                    <div class="modal-body modal-body-flush">
-                        <iframe id="draftFrame" title="Шартнома лойиҳаси" style="width:100%;height:100%;border:0;display:block"></iframe>
-                    </div>
-                </div>
-            </div>
-            @endif
+                </article>
 
-            {{-- Тарих — юқоридаги тугма босилганда popup (модал)да очилади --}}
-            <div class="modal-overlay" id="historyModal" style="display:none" onclick="if(event.target===this) closeHistory()">
-                <div class="modal-panel">
-                    <div class="modal-head">
-                        <h2>Тарих — кимдан кимга</h2>
-                        <button type="button" class="modal-x" onclick="closeHistory()" title="Ёпиш"><i class="fa-solid fa-xmark"></i></button>
-                    </div>
-                    <div class="modal-body">
-                        <div class="timeline">
-                        @foreach($events as $ev)
-                            @if($ev['type'] === 'created')
-                                <div class="tl-item">
-                                    <div class="tl-dot teal">●</div>
-                                    <div class="tl-time">{{ optional($ev['at'])->format('d.m.Y H:i') }}</div>
-                                    <div class="tl-card">
-                                        <div class="tl-title">Ариза яратилди</div>
-                                        <div class="tl-meta">Тадбиркор: <b>{{ $application->applicant?->displayName() }}</b>
-                                            @if($application->applicant?->phone) · {{ $application->applicant->phone }}@endif</div>
-                                        <div class="tl-meta">Объект: {{ $application->object?->company_name }} · {{ $application->object?->cadastre_number }}</div>
-                                    </div>
-                                </div>
-                            @elseif($ev['type'] === 'survey')
-                                @php $sv = $ev['survey']; @endphp
-                                <div class="tl-item">
-                                    <div class="tl-dot slate"><i class="fa-solid fa-location-crosshairs"></i></div>
-                                    <div class="tl-time">{{ optional($ev['at'])->format('d.m.Y H:i') }}</div>
-                                    <div class="tl-card">
-                                        <div class="tl-title">Объект ўлчови ўтказилди</div>
-                                        <div class="tl-meta">Мас'ул ходим: <b>{{ $sv->surveyor?->displayName() }}</b></div>
-                                        <div class="tl-meta">А томони: {{ $sv->length_m ?? '—' }} м · Б томони: {{ $sv->width_m ?? '—' }} м · Майдон: <b>{{ $sv->total_area ?? '—' }} м²</b></div>
-                                        @if(!empty($sv->photos))
-                                            <div class="photo-grid mt-8">
-                                                @foreach(array_slice($sv->photos, 0, 4) as $photo)
-                                                    <a href="{{ asset($photo) }}" target="_blank" class="photo-thumb sm" style="background-image:url('{{ asset($photo) }}')"></a>
-                                                @endforeach
-                                            </div>
-                                        @endif
-                                        @if(!empty($sv->geo_area))
-                                            <div class="tl-meta"><i class="fa-solid fa-map-location-dot"></i> Майдон харитада белгиланган</div>
-                                        @endif
-                                    </div>
-                                </div>
-                            @else
-                                @php $tr = $ev['tr']; $col = $tr->action->color(); @endphp
-                                <div class="tl-item">
-                                    <div class="tl-dot {{ $col }}">●</div>
-                                    <div class="tl-time">{{ optional($ev['at'])->format('d.m.Y H:i') }}</div>
-                                    <div class="tl-card">
-                                        <div class="tl-title">{{ $tr->action->label() }}</div>
-                                        <div class="tl-meta">
-                                            <b>{{ $tr->performer?->displayName() }}</b>
-                                            @if($tr->performer?->roleType()) · {{ $tr->performer->roleType()->label() }}@endif
-                                            @if($tr->performer?->phone) · {{ $tr->performer->phone }}@endif
-                                        </div>
-                                        <div class="tl-meta">
-                                            {{ $tr->from_stage?->label() ?? '—' }} → <b>{{ $tr->to_stage->label() }}</b>
-                                        </div>
-                                        @if($tr->comment)
-                                            <div class="tl-comment"><i class="fa-solid fa-comment"></i> {{ $tr->comment }}</div>
-                                        @endif
-                                    </div>
-                                </div>
-                            @endif
-                        @endforeach
+                @if($latestSurvey)
+                    <article class="info-card mt-16">
+                        <div class="section-title"><span class="section-icon"><i class="fa-solid fa-ruler-combined"></i></span><div><h2>Ўлчов натижалари</h2><p>{{ $latestSurvey->surveyor?->displayName() }} томонидан киритилган</p></div></div>
+                        <div class="survey-summary">
+                            <div><span>Узунлик</span><strong>{{ $latestSurvey->length_m ?? '—' }} м</strong></div>
+                            <div><span>Эни</span><strong>{{ $latestSurvey->width_m ?? '—' }} м</strong></div>
+                            <div class="primary"><span>Умумий майдон</span><strong>{{ $latestSurvey->total_area ?? '—' }} м²</strong></div>
+                            <div><span>Фасад</span><strong>{{ $latestSurvey->facade_length_m ?? '—' }} м</strong></div>
+                            <div><span>Йўлгача</span><strong>{{ $latestSurvey->distance_to_road_m ?? '—' }} м</strong></div>
+                            <div><span>Кўча тури</span><strong>{{ $latestSurvey->street_type ?? '—' }}</strong></div>
                         </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+                    </article>
+                @endif
 
-        {{-- Ўнг устун: ҳаракатлар + ўлчов формаси --}}
-        <div>
-            @if($canEditSurvey)
-                <div class="card mb-16">
-                    <div class="card-head"><h2>{!! $latestSurvey ? '<i class="fa-solid fa-pen"></i> Маълумотларни таҳрирлаш' : 'Ўлчов (жой ўрганиш)' !!}</h2></div>
-                    <div class="card-body">
-                        <p class="tiny muted mb-16">
-                            @if($latestSurvey)
-                                Киритилган маълумотларни ариза тасдиқлангунча таҳрирлай оласиз.
-                            @else
-                                Ўлчовни тўлдиринг, 4 та расм ва керакли ҳужжатларни юкланг, харитада майдонни белгиланг.
-                            @endif
-                        </p>
-                        <form method="POST" action="{{ route('applications.survey', $application) }}" enctype="multipart/form-data" id="surveyForm">
-                            @csrf
-                            <div class="form-grid">
-                                <div class="form-row"><label class="lbl">А томони — узунлик (м)</label><input class="inp" type="number" step="0.01" name="length_m" id="lengthInp" value="{{ old('length_m', $latestSurvey?->length_m) }}" placeholder="8"></div>
-                                <div class="form-row"><label class="lbl">Б томони — эни (м)</label><input class="inp" type="number" step="0.01" name="width_m" id="widthInp" value="{{ old('width_m', $latestSurvey?->width_m) }}" placeholder="10"></div>
-                            </div>
-                            <div class="form-row">
-                                <label class="lbl">Умумий майдон (м²) <span class="req">*</span></label>
-                                <input class="inp" type="number" step="0.01" name="total_area" id="totalArea" value="{{ old('total_area', $latestSurvey?->total_area) }}" placeholder="80" required readonly>
-                                <span class="tiny muted mt-8">Узунлик × эни асосида автоматик ҳисобланади.</span>
-                            </div>
-                            <div class="form-grid">
-                                <div class="form-row"><label class="lbl">Фасад узунлиги (м)</label><input class="inp" type="number" step="0.01" name="facade_length_m" value="{{ old('facade_length_m', $latestSurvey?->facade_length_m) }}"></div>
-                                <div class="form-row"><label class="lbl">Йўлгача масофа (м)</label><input class="inp" type="number" step="0.01" name="distance_to_road_m" value="{{ old('distance_to_road_m', $latestSurvey?->distance_to_road_m) }}"></div>
-                            </div>
-                            <div class="form-grid">
-                                <div class="form-row">
-                                    <label class="lbl">Кўча тури <span class="req">*</span></label>
-                                    <select class="inp" name="street_type" required>
-                                        <option value="">— Танланг —</option>
-                                        @foreach(\App\Models\ApplicationSurvey::STREET_TYPES as $t)
-                                            <option value="{{ $t }}" @selected(old('street_type', $latestSurvey?->street_type) === $t)>{{ $t }}</option>
-                                        @endforeach
-                                    </select>
-                                </div>
-                                <div class="form-row">
-                                    <label class="lbl">Фойдаланиш мақсади <span class="req">*</span></label>
-                                    <select class="inp" name="usage_purpose" required>
-                                        <option value="">— Танланг —</option>
-                                        @foreach(\App\Models\ApplicationSurvey::USAGE_PURPOSES as $p)
-                                            <option value="{{ $p }}" @selected(old('usage_purpose', $latestSurvey?->usage_purpose) === $p)>{{ $p }}</option>
-                                        @endforeach
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="form-row"><label class="lbl">Изоҳ</label><textarea class="inp" name="extra_info" placeholder="Қўшимча...">{{ old('extra_info', $latestSurvey?->extra_info) }}</textarea></div>
-
-                            {{-- Расм юклаш — ҳар бир расм алоҳида катакка; 4 тадан кейин 5-катак очилади --}}
-                            <div class="form-row">
-                                <label class="lbl">Объект расмлари — камида 4 та (jpg/png) <span class="req">*</span></label>
-                                <div id="photoSlots" class="photo-slots" data-has-existing="{{ $latestSurvey && $latestSurvey->photos ? '1' : '0' }}"></div>
-                                <div class="tiny muted mt-8" id="photoHint">Камида 4 та расм юкланг</div>
-                                {{-- Яширин: бири form submit учун (photos[]), бири битта расм танлаш учун --}}
-                                <input class="dz-input" type="file" name="photos[]" id="photoInput" accept="image/*" multiple>
-                                <input class="dz-input" type="file" id="photoPicker" accept="image/*">
-                                @if($latestSurvey && $latestSurvey->photos)
-                                    <div class="tiny muted mt-8">Сақланган расмлар (янги юкласангиз алмаштирилади):</div>
-                                    <div class="photo-grid mt-8">
-                                        @foreach($latestSurvey->photos as $p)
-                                            <a href="{{ asset($p) }}" target="_blank" class="photo-thumb sm" style="background-image:url('{{ asset($p) }}')"></a>
-                                        @endforeach
-                                    </div>
-                                @endif
-                            </div>
-
-                            {{-- Керакли ҳужжатлар --}}
-                            <div class="form-row">
-                                <label class="lbl">Керакли ҳужжатлар (pdf, расм, Word/Excel)</label>
-                                <label class="dropzone dz-doc" for="docInput">
-                                    <span class="dz-icon"><i class="fa-solid fa-paperclip"></i></span>
-                                    <span class="dz-text">Ҳужжат(лар)ни танлаш учун босинг</span>
-                                    <span class="dz-hint">Кўпи 10 та · ҳар бири 10 МБ гача</span>
-                                </label>
-                                <input class="dz-input" type="file" name="documents[]" id="docInput" accept=".pdf,.doc,.docx,.xls,.xlsx,image/*" multiple>
-                                <ul id="docPreview" class="doc-list mt-8"></ul>
-                                @if($latestSurvey && $latestSurvey->documents)
-                                    <div class="tiny muted mt-8">Сақланган ҳужжатлар (янги юкласангиз алмаштирилади):</div>
-                                    @include('partials.file-cards', ['files' => $latestSurvey->documents])
-                                @endif
-                            </div>
-
-                            {{-- Харитада майдонни белгилаш --}}
-                            <div class="form-row">
-                                <label class="lbl"><i class="fa-solid fa-map-location-dot"></i> Ижарага олинаётган майдонни харитада белгиланг</label>
-                                <div class="map-edit" id="drawMap" data-lat="41.311" data-lng="69.279"></div>
-                                <div class="flex gap-8 mt-8">
-                                    <button type="button" class="btn btn-outline btn-sm" id="clearDraw">Тозалаш</button>
-                                    <span class="tiny muted" id="drawHint" style="align-self:center">Тўртбурчак/кўпбурчак чизинг</span>
-                                </div>
-                                <input type="hidden" name="geo_area" id="geoArea" value="{{ old('geo_area', $latestSurvey && $latestSurvey->geo_area ? json_encode($latestSurvey->geo_area) : '') }}">
-                                <input type="hidden" name="latitude" id="latInput" value="{{ old('latitude', $latestSurvey?->latitude) }}">
-                                <input type="hidden" name="longitude" id="lngInput" value="{{ old('longitude', $latestSurvey?->longitude) }}">
-                            </div>
-
-                            <button class="btn btn-teal btn-block" type="submit">{{ $latestSurvey ? 'Ўзгаришларни сақлаш' : 'Маълумотларни сақлаш' }}</button>
-                        </form>
-                    </div>
-                </div>
-            @endif
-
-            {{-- Раҳбарият учун: мас'ул ходим ва ўринбосар хулосалари (қарордан олдин) --}}
-            @if($isLeadership && $conclusions->isNotEmpty())
-                <div class="card mb-16">
-                    <div class="card-head"><h2>Хулосалар (мас'ул ходим ва ўринбосар)</h2></div>
-                    <div class="card-body">
-                        @foreach($conclusions as $c)
+                @if($isLeadership && $conclusions->isNotEmpty())
+                    <article class="info-card mt-16">
+                        <div class="section-title"><span class="section-icon"><i class="fa-solid fa-comments"></i></span><div><h2>Хулосалар</h2><p>Қарор қабул қилиш учун хизмат ёзувлари</p></div></div>
+                        @foreach($conclusions as $conclusion)
                             <div class="conclusion">
                                 <div class="conclusion-head">
-                                    <x-badge :color="$c->from_stage->color()"
-                                             :label="$conclusionStages[$c->from_stage->value]" />
-                                    <span class="tiny muted">{{ optional($c->created_at)->format('d.m.Y H:i') }}</span>
+                                    <strong>{{ $conclusionStages[$conclusion->from_stage->value] }}</strong>
+                                    <span class="tiny muted">{{ optional($conclusion->created_at)->format('d.m.Y H:i') }}</span>
                                 </div>
-                                <div class="tiny muted mt-8">
-                                    <b>{{ $c->performer?->displayName() }}</b>
-                                    @if($c->performer?->roleType()) · {{ $c->performer->roleType()->label() }}@endif
-                                    · <span>{{ $c->action->label() }}</span>
-                                </div>
-                                <div class="conclusion-text">{{ filled($c->comment) ? $c->comment : 'Изоҳ ёзилмаган' }}</div>
+                                <div class="tiny muted mt-8">{{ $conclusion->performer?->displayName() }} · {{ $conclusion->action->label() }}</div>
+                                <div class="conclusion-text">{{ filled($conclusion->comment) ? $conclusion->comment : 'Изоҳ ёзилмаган' }}</div>
                             </div>
                         @endforeach
-                    </div>
-                </div>
-            @endif
+                    </article>
+                @endif
+            </div>
 
-            {{-- Ҳаракатлар — фақат бажариш мумкин бўлган ҳаракат бўлса кўринади (акс ҳолда яширин) --}}
-            @if(count($availableActions) > 0)
-                <div class="card">
-                    <div class="card-head"><h2>Ҳаракатлар</h2></div>
-                    <div class="card-body">
-                        <form method="POST" action="{{ route('applications.transition', $application) }}">
-                            @csrf
-                            <div class="form-row">
-                                <label class="lbl">Изоҳ (бекор қилиш/қайтаришда мажбурий)</label>
-                                <textarea class="inp" name="comment" placeholder="Изоҳ ёки сабаб...">{{ old('comment') }}</textarea>
-                            </div>
-                            <div class="flex gap-8 wrap">
-                                @foreach($availableActions as $action)
-                                    <button class="btn {{ $btnClass[$action->color()] ?? 'btn-outline' }}"
-                                            type="submit" name="action" value="{{ $action->value }}">
-                                        {{ $action->buttonLabel() }}
-                                    </button>
-                                @endforeach
-                            </div>
-                            <p class="tiny muted mt-16"><i class="fa-solid fa-triangle-exclamation"></i> Имзо (Е-ИМЗО) демода симуляция қилинмаган — ҳаракат тугма босиш билан амалга ошади.</p>
-                        </form>
-                    </div>
-                </div>
-            @endif
+            <div class="tab-panel" data-panel="survey">
+                @if($canEditSurvey)
+                    <form method="POST" action="{{ route('applications.survey', $application) }}" enctype="multipart/form-data" id="surveyForm">
+                        @csrf
+                        <div class="panel-heading">
+                            <div><h2>{{ $latestSurvey ? 'Ўлчовни таҳрирлаш' : 'Жой ўрганиш маълумотлари' }}</h2><p>Харитада майдонни белгиланг ва ўлчов натижаларини киритинг.</p></div>
+                            <button class="btn btn-teal" type="submit"><i class="fa-solid fa-floppy-disk"></i> Сақлаш</button>
+                        </div>
 
-            {{-- Ҳаракатлар остида — шартнома лойиҳаси бевосита кўриниб туради (DOCX viewer) --}}
-            @if($application->draft_document_path)
-                <div class="card mt-16">
-                    <div class="card-head">
-                        <h2><i class="fa-solid fa-file-contract"></i> Шартнома лойиҳаси</h2>
-                        <a href="{{ asset($application->draft_document_path) }}" class="btn btn-outline btn-sm" download><i class="fa-solid fa-download"></i> DOCX</a>
+                        <div id="uploadGuard" class="upload-guard" hidden></div>
+
+                        <article class="info-card map-card">
+                            <div class="map-toolbar">
+                                <div><strong><i class="fa-solid fa-layer-group"></i> Hybrid харита</strong><span id="drawHint">Майдон чегарасини чизинг ёки таҳрирланг</span></div>
+                                <button type="button" class="btn btn-outline btn-sm" id="clearDraw"><i class="fa-solid fa-eraser"></i> Тозалаш</button>
+                            </div>
+                            <div class="map-edit" id="drawMap" data-lat="{{ $mapLat }}" data-lng="{{ $mapLng }}" data-geo='@json(old('geo_area', $latestSurvey?->geo_area))'></div>
+                            <input type="hidden" name="geo_area" id="geoArea" value="{{ old('geo_area', $latestSurvey?->geo_area ? json_encode($latestSurvey->geo_area) : '') }}">
+                            <input type="hidden" name="latitude" id="latInput" value="{{ old('latitude', $latestSurvey?->latitude) }}">
+                            <input type="hidden" name="longitude" id="lngInput" value="{{ old('longitude', $latestSurvey?->longitude) }}">
+                        </article>
+
+                        <div class="info-grid mt-16">
+                            <article class="info-card">
+                                <div class="section-title compact"><span class="section-icon"><i class="fa-solid fa-ruler"></i></span><div><h2>Ўлчамлар</h2><p>Асосий геометрик кўрсаткичлар</p></div></div>
+                                <div class="form-grid">
+                                    <div class="form-row"><label class="lbl">А томони — узунлик (м)</label><input class="inp" type="number" step="0.01" name="length_m" id="lengthInp" value="{{ old('length_m', $latestSurvey?->length_m) }}"></div>
+                                    <div class="form-row"><label class="lbl">Б томони — эни (м)</label><input class="inp" type="number" step="0.01" name="width_m" id="widthInp" value="{{ old('width_m', $latestSurvey?->width_m) }}"></div>
+                                </div>
+                                <div class="form-row"><label class="lbl">Умумий майдон (м²) <span class="req">*</span></label><input class="inp total-area" type="number" step="0.01" name="total_area" id="totalArea" value="{{ old('total_area', $latestSurvey?->total_area) }}" required readonly><div class="help">Узунлик × эни асосида автоматик ҳисобланади.</div></div>
+                                <div class="form-grid">
+                                    <div class="form-row"><label class="lbl">Фасад узунлиги (м)</label><input class="inp" type="number" step="0.01" name="facade_length_m" value="{{ old('facade_length_m', $latestSurvey?->facade_length_m) }}"></div>
+                                    <div class="form-row"><label class="lbl">Йўлгача масофа (м)</label><input class="inp" type="number" step="0.01" name="distance_to_road_m" value="{{ old('distance_to_road_m', $latestSurvey?->distance_to_road_m) }}"></div>
+                                </div>
+                                <div class="form-row mb-0"><label class="lbl">Йўлаккача масофа (м)</label><input class="inp" type="number" step="0.01" name="distance_to_sidewalk_m" value="{{ old('distance_to_sidewalk_m', $latestSurvey?->distance_to_sidewalk_m) }}"></div>
+                            </article>
+
+                            <article class="info-card">
+                                <div class="section-title compact"><span class="section-icon"><i class="fa-solid fa-clipboard-check"></i></span><div><h2>Фойдаланиш маълумотлари</h2><p>Майдоннинг ҳолати ва мақсади</p></div></div>
+                                <div class="form-row"><label class="lbl">Кўча тури <span class="req">*</span></label><select class="inp" name="street_type" required><option value="">— Танланг —</option>@foreach(\App\Models\ApplicationSurvey::STREET_TYPES as $type)<option value="{{ $type }}" @selected(old('street_type', $latestSurvey?->street_type) === $type)>{{ $type }}</option>@endforeach</select></div>
+                                <div class="form-row"><label class="lbl">Фойдаланиш мақсади <span class="req">*</span></label><select class="inp" name="usage_purpose" required><option value="">— Танланг —</option>@foreach(\App\Models\ApplicationSurvey::USAGE_PURPOSES as $purpose)<option value="{{ $purpose }}" @selected(old('usage_purpose', $latestSurvey?->usage_purpose) === $purpose)>{{ $purpose }}</option>@endforeach</select></div>
+                                <div class="form-row"><label class="lbl">Фаолият тури</label><input class="inp" name="activity_type" value="{{ old('activity_type', $latestSurvey?->activity_type) }}"></div>
+                                <div class="form-row"><label class="lbl">Терраса иншоотлари</label><input class="inp" name="terrace_structures" value="{{ old('terrace_structures', $latestSurvey?->terrace_structures) }}"></div>
+                                <div class="form-row"><label class="lbl">Доимий иншоотлар</label><input class="inp" name="permanent_structures" value="{{ old('permanent_structures', $latestSurvey?->permanent_structures) }}"></div>
+                                <div class="form-row"><label class="lbl">Рухсат ҳужжати</label><input class="inp" name="permit" value="{{ old('permit', $latestSurvey?->permit) }}"></div>
+                                <div class="form-row mb-0"><label class="lbl">Қўшимча изоҳ</label><textarea class="inp" name="extra_info">{{ old('extra_info', $latestSurvey?->extra_info) }}</textarea></div>
+                            </article>
+                        </div>
+
+                        <article class="info-card mt-16">
+                            <div class="section-title"><span class="section-icon"><i class="fa-solid fa-cloud-arrow-up"></i></span><div><h2>Фото ва ҳужжатлар</h2><p>Расмлар браузерда автоматик оптималлаштирилади</p></div></div>
+                            <div class="upload-grid">
+                                <div>
+                                    <label class="lbl">Объект расмлари — камида 4 та <span class="req">*</span></label>
+                                    <div id="photoSlots" class="photo-slots" data-has-existing="{{ $latestSurvey && $latestSurvey->photos ? '1' : '0' }}"></div>
+                                    <div class="help" id="photoHint">Камида 4 та расм юкланг · ҳар бири 5 МБ гача</div>
+                                    <input class="dz-input" type="file" name="photos[]" id="photoInput" accept="image/jpeg,image/png,image/webp" multiple>
+                                    <input class="dz-input" type="file" id="photoPicker" accept="image/jpeg,image/png,image/webp">
+                                </div>
+                                <div>
+                                    <label class="lbl">Қўшимча ҳужжатлар</label>
+                                    <label class="dropzone dz-doc" for="docInput"><span class="dz-icon"><i class="fa-solid fa-paperclip"></i></span><span class="dz-text">Файлларни танлаш</span><span class="dz-hint">PDF, Word, Excel ёки расм · 10 МБ гача</span></label>
+                                    <input class="dz-input" type="file" name="documents[]" id="docInput" accept=".pdf,.doc,.docx,.xls,.xlsx,image/*" multiple>
+                                    <ul id="docPreview" class="doc-list mt-8"></ul>
+                                </div>
+                            </div>
+                        </article>
+                    </form>
+                @elseif($latestSurvey)
+                    <div class="panel-heading"><div><h2>Ўлчов ва харита</h2><p>Масъул ходим киритган маълумотлар</p></div></div>
+                    <article class="info-card map-card">
+                        <div class="map-toolbar"><div><strong><i class="fa-solid fa-layer-group"></i> Hybrid харита</strong><span>Satellite, hybrid ва оддий харита қатламлари</span></div></div>
+                        <div class="map-edit" id="surveyMap" data-lat="{{ $mapLat }}" data-lng="{{ $mapLng }}" data-geo='@json($latestSurvey->geo_area)'></div>
+                    </article>
+                    <div class="survey-summary mt-16">
+                        <div><span>Узунлик</span><strong>{{ $latestSurvey->length_m ?? '—' }} м</strong></div><div><span>Эни</span><strong>{{ $latestSurvey->width_m ?? '—' }} м</strong></div><div class="primary"><span>Майдон</span><strong>{{ $latestSurvey->total_area ?? '—' }} м²</strong></div><div><span>Фасад</span><strong>{{ $latestSurvey->facade_length_m ?? '—' }} м</strong></div><div><span>Йўлгача</span><strong>{{ $latestSurvey->distance_to_road_m ?? '—' }} м</strong></div><div><span>Мақсад</span><strong>{{ $latestSurvey->usage_purpose ?? '—' }}</strong></div>
                     </div>
-                    <div class="card-body" style="padding:0">
-                        <iframe src="{{ route('applications.contract-draft', $application) }}" title="Шартнома лойиҳаси"
-                                style="width:100%;height:640px;border:0;display:block;border-radius:0 0 12px 12px"></iframe>
+                @else
+                    <div class="empty-state"><i class="fa-solid fa-map-location-dot"></i><h2>Ўлчов ҳали киритилмаган</h2><p>Ариза масъул ходим босқичига ўтганда харита ва ўлчов маълумотлари шу ерда кўринади.</p></div>
+                @endif
+            </div>
+
+            <div class="tab-panel" data-panel="files">
+                <div class="panel-heading"><div><h2>Ариза файллари</h2><p>Фото, ҳужжат ва шаклланган файллар бир жойда</p></div>@if($canEditSurvey)<button type="button" class="btn btn-teal" data-open-tab="survey"><i class="fa-solid fa-plus"></i> Файл қўшиш</button>@endif</div>
+                <article class="info-card">
+                    <div class="section-title"><span class="section-icon"><i class="fa-regular fa-images"></i></span><div><h2>Объект расмлари</h2><p>{{ count($latestSurvey?->photos ?? []) }} та файл</p></div></div>
+                    @if(!empty($latestSurvey?->photos))<div class="photo-gallery">@foreach($latestSurvey->photos as $photo)<a href="{{ asset($photo) }}" target="_blank" class="photo-thumb" style="background-image:url('{{ asset($photo) }}')"><span><i class="fa-solid fa-up-right-from-square"></i></span></a>@endforeach</div>@else<div class="empty compact">Расмлар ҳали юкланмаган</div>@endif
+                </article>
+                <article class="info-card mt-16">
+                    <div class="section-title"><span class="section-icon"><i class="fa-regular fa-file-lines"></i></span><div><h2>Ҳужжатлар</h2><p>{{ count($latestSurvey?->documents ?? []) }} та файл</p></div></div>
+                    @if(!empty($latestSurvey?->documents))@include('partials.file-cards', ['files' => $latestSurvey->documents])@else<div class="empty compact">Ҳужжатлар ҳали юкланмаган</div>@endif
+                </article>
+            </div>
+
+            <div class="tab-panel" data-panel="history">
+                <div class="panel-heading"><div><h2>Ариза ҳаракати тарихи</h2><p>Яратилишдан жорий босқичгача бўлган аудит</p></div></div>
+                <article class="info-card">
+                    <div class="timeline">
+                        @foreach($events as $event)
+                            @if($event['type'] === 'created')
+                                <div class="tl-item"><div class="tl-dot teal"><i class="fa-solid fa-plus"></i></div><div class="tl-time">{{ optional($event['at'])->format('d.m.Y H:i') }}</div><div class="tl-card"><div class="tl-title">Ариза яратилди</div><div class="tl-meta">Тадбиркор: <b>{{ $application->applicant?->displayName() }}</b> · {{ $application->applicant?->phone }}</div><div class="tl-meta">Объект: {{ $application->object?->company_name }} · {{ $application->object?->cadastre_number }}</div></div></div>
+                            @elseif($event['type'] === 'survey')
+                                @php $survey = $event['survey']; @endphp
+                                <div class="tl-item"><div class="tl-dot slate"><i class="fa-solid fa-ruler-combined"></i></div><div class="tl-time">{{ optional($event['at'])->format('d.m.Y H:i') }}</div><div class="tl-card"><div class="tl-title">Объект ўлчови сақланди</div><div class="tl-meta">Масъул: <b>{{ $survey->surveyor?->displayName() }}</b> · Майдон: {{ $survey->total_area }} м²</div></div></div>
+                            @else
+                                @php $transition = $event['transition']; @endphp
+                                <div class="tl-item"><div class="tl-dot {{ $transition->action->color() }}"><i class="fa-solid fa-arrow-right"></i></div><div class="tl-time">{{ optional($event['at'])->format('d.m.Y H:i') }}</div><div class="tl-card"><div class="tl-title">{{ $transition->action->label() }}</div><div class="tl-meta"><b>{{ $transition->performer?->displayName() }}</b> · {{ $transition->performer?->roleType()?->label() }}</div><div class="tl-meta">{{ $transition->from_stage?->label() ?? '—' }} → <b>{{ $transition->to_stage->label() }}</b></div>@if($transition->comment)<div class="tl-comment"><i class="fa-regular fa-comment"></i> {{ $transition->comment }}</div>@endif</div></div>
+                            @endif
+                        @endforeach
                     </div>
-                </div>
-            @endif
-        </div>
+                </article>
+            </div>
+        </section>
+
+        <aside class="application-rail">
+            <div class="sticky-stack">
+                <article class="contract-card">
+                    <div class="contract-head"><div><span>ШАРТНОМА</span><h2>{{ $application->contract?->contract_number ?: 'Шартнома лойиҳаси' }}</h2></div><i class="fa-solid fa-file-signature"></i></div>
+                    @if($application->draft_document_path)
+                        <div class="contract-intro">
+                            <span class="contract-document-icon"><i class="fa-solid fa-file-contract"></i></span>
+                            <h3>Шартнома лойиҳаси тайёр</h3>
+                            <p>Ҳужжатни қулай ўлчамда ўқиш, текшириш ва тасдиқлашдан олдин тўлиқ кўриб чиқишингиз мумкин.</p>
+                            <div class="contract-meta"><span><i class="fa-regular fa-file-word"></i> DOCX</span><span><i class="fa-regular fa-clock"></i> {{ optional($application->updated_at)->format('d.m.Y H:i') }}</span></div>
+                        </div>
+                        <div class="contract-actions"><button type="button" class="btn btn-teal btn-block contract-primary" onclick="openDraft()"><i class="fa-solid fa-book-open"></i> Шартнома билан танишиш</button><a href="{{ asset($application->draft_document_path) }}" class="btn btn-outline btn-block" download><i class="fa-solid fa-download"></i> DOCX юклаб олиш</a></div>
+                    @elseif($application->contract)
+                        <div class="contract-ready"><span><i class="fa-solid fa-circle-check"></i></span><h3>Шартнома расмийлаштирилган</h3><p>{{ optional($application->contract->contract_date)->format('d.m.Y') }}</p></div><div class="contract-actions"><a href="{{ route('contracts.show', $application->contract) }}" class="btn btn-green btn-block">Шартномани очиш</a></div>
+                    @else
+                        <div class="contract-empty"><i class="fa-solid fa-lock"></i><h3>Ҳали шаклланмаган</h3><p>Раҳбар кўриги босқичида шартнома лойиҳаси автоматик тайёрланади.</p></div>
+                    @endif
+                </article>
+
+                @if(count($availableActions) > 0)
+                    <article class="decision-card">
+                        <div class="decision-head"><span><i class="fa-solid fa-bolt"></i></span><div><h2>Қарор</h2><p>Жорий босқич бўйича ҳаракат</p></div></div>
+                        <form method="POST" action="{{ route('applications.transition', $application) }}">@csrf<textarea class="inp" name="comment" placeholder="Изоҳ ёки сабаб...">{{ old('comment') }}</textarea><div class="decision-actions">@foreach($availableActions as $action)<button class="btn {{ $btnClass[$action->color()] ?? 'btn-outline' }} btn-block" type="submit" name="action" value="{{ $action->value }}">{{ $action->buttonLabel() }}</button>@endforeach</div></form>
+                    </article>
+                @endif
+            </div>
+        </aside>
     </div>
+
+    @if($application->draft_document_path)
+        <div class="modal-overlay" id="draftModal" hidden onclick="if(event.target===this) closeDraft()"><div class="modal-panel modal-panel-wide"><div class="modal-head"><div><h2><i class="fa-solid fa-file-contract"></i> Шартнома билан танишиш</h2><p>{{ $application->application_number }} · {{ $application->object?->company_name }}</p></div><div class="modal-head-actions"><a href="{{ asset($application->draft_document_path) }}" class="btn btn-outline btn-sm" download><i class="fa-solid fa-download"></i> DOCX</a><button type="button" class="modal-x" onclick="closeDraft()" title="Ёпиш"><i class="fa-solid fa-xmark"></i></button></div></div><div class="modal-body modal-body-flush"><iframe id="draftFrame" title="Шартнома лойиҳаси"></iframe></div></div></div>
+    @endif
 @endsection
 
 @push('styles')
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css">
     <style>
-        .photo-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-        .photo-thumb { display: block; aspect-ratio: 4/3; border-radius: 8px; background-size: cover; background-position: center; background-color: #eef2f4; border: 1px solid var(--line); }
-        .photo-thumb.sm { aspect-ratio: 1/1; border-radius: 6px; }
-        /* Файл юклаш dropzone'и */
-        .dz-input { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
-        .dropzone { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
-            padding: 22px 16px; border: 2px dashed var(--teal); border-radius: 12px; background: var(--teal-light);
-            color: var(--teal-dark); text-align: center; cursor: pointer; transition: background .15s, border-color .15s; }
-        .dropzone:hover { background: #e3f3f1; border-color: var(--teal-dark); }
-        .dropzone .dz-icon { font-size: 30px; line-height: 1; }
-        .dropzone .dz-text { font-weight: 700; font-size: 14px; }
-        .dropzone .dz-hint { font-size: 12px; color: var(--muted); }
-        .dropzone .dz-hint.ok { color: var(--teal-dark); font-weight: 700; }
-        .dropzone .dz-hint.bad { color: var(--red, #d23); font-weight: 700; }
-        .dropzone.dz-doc { border-color: var(--line); background: #f8fafa; color: var(--ink, #1f2937); }
-        .dropzone.dz-doc:hover { background: #eef2f4; }
-        .doc-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
-        .doc-list li { font-size: 13px; display: flex; align-items: center; gap: 8px; }
-        .doc-list a { color: var(--teal-dark); text-decoration: none; }
-        .doc-list a:hover { text-decoration: underline; }
-        /* Сақланган файллар — чиройли карточкалар */
-        .file-cards { display: flex; flex-wrap: wrap; gap: 8px; }
-        .file-card { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border: 1px solid var(--line);
-            border-radius: 10px; background: #fff; text-decoration: none; color: inherit; min-width: 160px;
-            transition: border-color .15s, box-shadow .15s; }
-        .file-card:hover { border-color: var(--teal); box-shadow: var(--shadow); }
-        .file-card .fc-icon { font-size: 24px; line-height: 1; }
-        .file-card .fc-body { display: flex; flex-direction: column; line-height: 1.25; }
-        .file-card .fc-name { font-size: 13px; font-weight: 700; }
-        .file-card .fc-ext { font-size: 11px; color: var(--muted); }
-        .file-card .fc-open { margin-left: auto; color: var(--muted); font-size: 12px; }
-        /* Тарих popup (модал) */
-        .modal-overlay { position: fixed; inset: 0; background: rgba(15,23,42,.55); z-index: 1000;
-            display: flex; align-items: flex-start; justify-content: center; padding: 40px 16px; overflow-y: auto; }
-        .modal-panel { background: #fff; border-radius: 14px; width: 100%; max-width: 720px;
-            box-shadow: var(--shadow-lg); max-height: 88vh; display: flex; flex-direction: column; overflow: hidden; }
-        .modal-head { display: flex; align-items: center; justify-content: space-between;
-            padding: 14px 20px; border-bottom: 1px solid var(--line); }
-        .modal-head h2 { margin: 0; font-size: 16px; }
-        .modal-x { border: none; background: transparent; font-size: 20px; cursor: pointer; color: var(--muted);
-            line-height: 1; padding: 4px 9px; border-radius: 6px; }
-        .modal-x:hover { background: #f1f5f9; color: #1f2937; }
-        .modal-body { padding: 18px 20px; overflow-y: auto; }
-        /* Кенг модал (шартнома лойиҳаси кўриниши учун) */
-        .modal-panel-wide { max-width: 900px; height: 88vh; }
-        .modal-body-flush { padding: 0; flex: 1; overflow: hidden; }
-        /* Юкланган файлни ўчириш тугмаси */
-        .thumb-wrap { position: relative; }
-        .thumb-x { position: absolute; top: -6px; right: -6px; }
-        .thumb-x, .doc-x { cursor: pointer; border: none; background: rgba(15,23,42,.7); color: #fff;
-            border-radius: 50%; width: 20px; height: 20px; font-size: 11px; line-height: 1;
-            display: inline-grid; place-items: center; padding: 0; }
-        .thumb-x:hover, .doc-x:hover { background: var(--red, #d23); }
-        /* Расм катаклари (ҳар бир расм алоҳида) */
-        .photo-slots { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
-        .photo-slot { position: relative; aspect-ratio: 1/1; border-radius: 12px; background-size: cover; background-position: center;
-            display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; }
-        .photo-slot.empty { border: 2px dashed var(--teal); background: var(--teal-light); color: var(--teal-dark); cursor: pointer; transition: background .15s; }
-        .photo-slot.empty:hover { background: #e3f3f1; }
-        .photo-slot.filled { border: 1px solid var(--line); }
-        .photo-slot .slot-plus { font-size: 22px; line-height: 1; }
-        .photo-slot .slot-n { font-size: 11px; color: var(--muted); }
-        .slot-x { position: absolute; top: -7px; right: -7px; cursor: pointer; border: none; background: rgba(15,23,42,.72);
-            color: #fff; border-radius: 50%; width: 22px; height: 22px; font-size: 12px; line-height: 1; display: inline-grid; place-items: center; padding: 0; }
-        .slot-x:hover { background: var(--red, #d23); }
-        @media (max-width: 560px) { .photo-slots { grid-template-columns: repeat(2, 1fr); } }
-        .map-edit { height: 300px; border-radius: 10px; border: 1px solid var(--line); overflow: hidden; }
-        .map-view { height: 230px; border-radius: 10px; border: 1px solid var(--line); overflow: hidden; }
-        .leaflet-container { font: inherit; }
+        .content { max-width: 1720px; width: 100%; margin: 0 auto; }
+        .application-hero { display:flex; align-items:center; justify-content:space-between; gap:20px; margin-bottom:16px; }
+        .application-kicker { color:var(--teal); font-size:11px; font-weight:800; letter-spacing:.12em; margin-bottom:5px; }
+        .application-number { font-size:23px; font-weight:850; letter-spacing:-.02em; }
+        .application-subtitle { color:var(--muted); font-size:12px; margin-top:6px; }
+        .stage-shell { background:#fff; border:1px solid var(--line); border-radius:14px; padding:15px 18px; box-shadow:var(--shadow); margin-bottom:16px; overflow-x:auto; }
+        .stage-flow { flex-wrap:nowrap; min-width:max-content; }
+        .stage-flow .step { padding:7px 11px; }
+        .stage-flow .arrow { font-size:9px; }
+        .application-workspace { display:grid; grid-template-columns:minmax(0,1fr) 370px; gap:18px; align-items:start; }
+        .application-main { min-width:0; }
+        .detail-tabs { display:flex; gap:5px; padding:6px; background:#e6eaed; border-radius:13px; margin-bottom:14px; overflow-x:auto; }
+        .detail-tab { border:0; background:transparent; color:#64748b; border-radius:9px; padding:10px 14px; font:inherit; font-size:13px; font-weight:700; cursor:pointer; white-space:nowrap; }
+        .detail-tab.active { background:#fff; color:var(--teal-dark); box-shadow:0 1px 4px rgba(15,23,42,.09); }
+        .tab-count { display:inline-grid; place-items:center; min-width:20px; height:20px; padding:0 6px; border-radius:999px; background:#dce3e7; font-size:10px; margin-left:3px; }
+        .detail-tab.active .tab-count { background:var(--teal-light); }
+        .tab-panel { display:none; }
+        .tab-panel.active { display:block; animation:tabIn .18s ease; }
+        @keyframes tabIn { from { opacity:.45; transform:translateY(3px) } to { opacity:1; transform:none } }
+        .info-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+        .info-card { background:#fff; border:1px solid var(--line); border-radius:14px; padding:20px; box-shadow:var(--shadow); }
+        .section-title { display:flex; align-items:center; gap:11px; margin-bottom:17px; }
+        .section-title.compact { margin-bottom:20px; }
+        .section-title h2, .panel-heading h2 { margin:0; font-size:15px; }
+        .section-title p, .panel-heading p { margin:2px 0 0; color:var(--muted); font-size:12px; }
+        .section-icon { width:36px; height:36px; border-radius:10px; display:grid; place-items:center; color:var(--teal-dark); background:var(--teal-light); flex:0 0 auto; }
+        .detail-list { margin:0; display:flex; flex-direction:column; gap:0; }
+        .detail-list>div { display:grid; grid-template-columns:135px minmax(0,1fr); gap:14px; padding:9px 0; border-bottom:1px solid #f0f2f4; }
+        .detail-list>div:last-child { border:0; }
+        .detail-list dt { color:var(--muted); font-size:12px; }
+        .detail-list dd { margin:0; font-size:13px; font-weight:650; text-align:right; overflow-wrap:anywhere; }
+        .metric-row { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+        .metric { padding:14px; border-radius:11px; background:#f7f9fa; border:1px solid #edf0f2; }
+        .metric span, .survey-summary span { display:block; color:var(--muted); font-size:11px; margin-bottom:5px; }
+        .metric strong { font-size:14px; }
+        .metric.accent { background:var(--teal-light); border-color:#cbe5e2; color:var(--teal-dark); }
+        .survey-summary { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+        .survey-summary>div { background:#f7f9fa; border:1px solid var(--line); border-radius:11px; padding:13px 14px; }
+        .survey-summary strong { display:block; font-size:14px; }
+        .survey-summary .primary { color:var(--teal-dark); background:var(--teal-light); border-color:#cbe5e2; }
+        .panel-heading { display:flex; align-items:center; justify-content:space-between; gap:14px; margin:4px 2px 14px; }
+        .map-card { padding:0; overflow:hidden; }
+        .map-toolbar { display:flex; justify-content:space-between; align-items:center; gap:15px; padding:13px 16px; border-bottom:1px solid var(--line); }
+        .map-toolbar strong, .map-toolbar span { display:block; }
+        .map-toolbar span { color:var(--muted); font-size:11px; margin-top:2px; }
+        .map-edit { height:430px; background:#dce6ea; }
+        .leaflet-container { font:inherit; }
+        .total-area { color:var(--teal-dark)!important; background:var(--teal-light)!important; font-weight:800; font-size:17px!important; }
+        .upload-grid { display:grid; grid-template-columns:1.15fr .85fr; gap:18px; }
+        .upload-guard { padding:11px 14px; border-radius:10px; margin-bottom:12px; background:#fff4e5; border:1px solid #f7d79d; color:#8a5100; font-size:13px; }
+        .dz-input { position:absolute; width:1px; height:1px; opacity:0; overflow:hidden; }
+        .dropzone { min-height:150px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px; padding:18px; border:2px dashed #b6c5cc; border-radius:12px; background:#f8fafb; cursor:pointer; text-align:center; }
+        .dropzone:hover { border-color:var(--teal); background:var(--teal-light); }
+        .dropzone .dz-icon { font-size:27px; color:var(--teal); }
+        .dropzone .dz-text { font-weight:700; }
+        .dropzone .dz-hint { color:var(--muted); font-size:11px; }
+        .photo-slots { display:grid; grid-template-columns:repeat(4,1fr); gap:9px; }
+        .photo-slot { position:relative; aspect-ratio:1/1; border-radius:11px; background-size:cover; background-position:center; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; }
+        .photo-slot.empty { border:2px dashed #b8d8d5; background:var(--teal-light); color:var(--teal-dark); cursor:pointer; }
+        .photo-slot.filled { border:1px solid var(--line); }
+        .slot-x,.doc-x { border:0; cursor:pointer; width:22px; height:22px; display:grid; place-items:center; border-radius:50%; background:#1f2933d9; color:#fff; }
+        .slot-x { position:absolute; top:-6px; right:-6px; }
+        .slot-plus { font-size:20px; }.slot-n { font-size:10px; }
+        .doc-list { list-style:none; padding:0; margin:8px 0 0; display:flex; flex-direction:column; gap:6px; }
+        .doc-list li { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:7px 9px; border:1px solid var(--line); border-radius:8px; font-size:12px; }
+        .photo-gallery { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+        .photo-thumb { min-height:145px; border-radius:11px; background-size:cover; background-position:center; position:relative; overflow:hidden; }
+        .photo-thumb span { position:absolute; right:8px; bottom:8px; width:29px; height:29px; border-radius:8px; background:#0f172acc; color:#fff; display:grid; place-items:center; }
+        .file-cards { display:flex; flex-wrap:wrap; gap:8px; }.file-card { display:flex; align-items:center; gap:10px; padding:10px 12px; border:1px solid var(--line); border-radius:10px; min-width:190px; color:inherit; }.file-card:hover { border-color:var(--teal); text-decoration:none; }.fc-icon { font-size:22px; }.fc-body { display:flex; flex-direction:column; }.fc-name { font-weight:700;font-size:12px;}.fc-ext{font-size:10px;color:var(--muted)}.fc-open{margin-left:auto}
+        .empty-state { min-height:390px; display:grid; place-items:center; align-content:center; text-align:center; background:#fff; border:1px dashed #bdc8cf; border-radius:14px; color:var(--muted); padding:40px; }
+        .empty-state>i { font-size:42px; color:#9bb8b6; }.empty-state h2{color:var(--ink);margin:13px 0 2px}.empty-state p{max-width:440px;margin:0}.empty.compact{padding:24px}
+        .application-rail { min-width:0; }.sticky-stack { position:sticky; top:78px; display:flex; flex-direction:column; gap:14px; }
+        .contract-card { background:#fff; border:1px solid #cfdadd; border-radius:15px; overflow:hidden; box-shadow:0 12px 30px rgba(15,23,42,.10); }
+        .contract-head { padding:15px 17px; display:flex; justify-content:space-between; align-items:center; background:linear-gradient(135deg,#0a5f5f,#0f7b7b); color:#fff; }
+        .contract-head span { font-size:9px; font-weight:800; letter-spacing:.13em; opacity:.75; }.contract-head h2 { font-size:14px; margin:2px 0 0; }.contract-head>i{font-size:24px;opacity:.75}
+        .contract-intro { text-align:center; padding:28px 22px 24px; background:linear-gradient(180deg,#f8fbfb 0%,#fff 100%); }.contract-document-icon{width:64px;height:64px;border-radius:18px;display:grid;place-items:center;margin:0 auto 14px;background:var(--teal-light);color:var(--teal-dark);font-size:28px;box-shadow:inset 0 0 0 1px #cbe5e2}.contract-intro h3{margin:0 0 7px;font-size:15px}.contract-intro p{margin:0 auto;color:var(--muted);font-size:12px;line-height:1.55;max-width:290px}.contract-meta{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin-top:16px}.contract-meta span{padding:5px 8px;border:1px solid var(--line);border-radius:7px;background:#fff;color:#64748b;font-size:10px}.contract-actions { display:grid; gap:8px; padding:12px; border-top:1px solid var(--line); }.contract-primary{min-height:43px;font-size:13px}.contract-ready,.contract-empty{text-align:center;padding:38px 22px}.contract-ready>span,.contract-empty>i{width:52px;height:52px;border-radius:50%;display:grid;place-items:center;margin:0 auto 12px;background:#e7f6ec;color:#1a7f43;font-size:22px}.contract-empty>i{background:#eef2f4;color:#64748b}.contract-ready h3,.contract-empty h3{margin:0 0 4px;font-size:14px}.contract-ready p,.contract-empty p{margin:0;color:var(--muted);font-size:12px}
+        .decision-card { background:#fff; border:1px solid var(--line); border-radius:14px; padding:16px; box-shadow:var(--shadow); }.decision-head{display:flex;gap:10px;align-items:center;margin-bottom:12px}.decision-head>span{width:34px;height:34px;display:grid;place-items:center;border-radius:9px;background:#fff4df;color:#b4690e}.decision-head h2{margin:0;font-size:14px}.decision-head p{margin:1px 0 0;color:var(--muted);font-size:11px}.decision-card textarea{min-height:70px}.decision-actions{display:grid;gap:7px;margin-top:9px}
+        .modal-overlay[hidden]{display:none}.modal-overlay{position:fixed;inset:0;background:#0f172acc;backdrop-filter:blur(4px);z-index:1000;display:flex;align-items:center;justify-content:center;padding:2.5vh 2vw}.modal-panel{background:#fff;border-radius:16px;width:100%;max-height:95vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 30px 80px rgba(2,8,23,.35)}.modal-panel-wide{width:min(1500px,96vw);height:95vh}.modal-head{min-height:62px;padding:11px 16px 11px 20px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:18px}.modal-head h2{font-size:15px;margin:0}.modal-head p{margin:2px 0 0;color:var(--muted);font-size:11px}.modal-head-actions{display:flex;align-items:center;gap:8px}.modal-x{border:0;background:#eef2f4;border-radius:9px;width:34px;height:34px;cursor:pointer}.modal-x:hover{background:#e1e7eb}.modal-body-flush{flex:1;background:#e9eef1}.modal-body-flush iframe{width:100%;height:100%;border:0;background:#fff}
+        @media(max-width:1250px){.application-workspace{grid-template-columns:minmax(0,1fr) 330px}.upload-grid{grid-template-columns:1fr}}
+        @media(max-width:980px){.application-workspace{grid-template-columns:1fr}.sticky-stack{position:static}.info-grid{grid-template-columns:1fr}}
+        @media(max-width:620px){.application-hero{align-items:flex-start}.application-hero>.btn{display:none}.detail-tabs{border-radius:10px}.metric-row,.survey-summary{grid-template-columns:1fr 1fr}.photo-slots,.photo-gallery{grid-template-columns:repeat(2,1fr)}.map-edit{height:360px}.detail-list>div{grid-template-columns:1fr}.detail-list dd{text-align:left}.panel-heading{align-items:flex-start}.panel-heading>.btn{padding:8px 10px}.modal-overlay{padding:0}.modal-panel-wide{width:100vw;height:100dvh;max-height:none;border-radius:0}.modal-head p{display:none}.modal-head-actions .btn{display:none}}
     </style>
 @endpush
 
@@ -499,244 +382,116 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
     <script>
-    document.addEventListener('DOMContentLoaded', function () {
-        const TILES = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
-        const ATTR = '© OpenStreetMap';
-
-        // Ариза ҳаракати тарихи — popup (модал) ойнада очилади.
-        window.openHistory = function () {
-            const m = document.getElementById('historyModal');
-            if (m) { m.style.display = 'flex'; document.body.style.overflow = 'hidden'; }
+    document.addEventListener('DOMContentLoaded', () => {
+        const tabs = [...document.querySelectorAll('.detail-tab')];
+        const panels = [...document.querySelectorAll('.tab-panel')];
+        const maps = [];
+        const activateTab = name => {
+            tabs.forEach(tab => tab.classList.toggle('active', tab.dataset.tab === name));
+            panels.forEach(panel => panel.classList.toggle('active', panel.dataset.panel === name));
+            history.replaceState(null, '', '#' + name);
+            setTimeout(() => maps.forEach(map => map.invalidateSize()), 80);
         };
-        window.closeHistory = function () {
-            const m = document.getElementById('historyModal');
-            if (m) { m.style.display = 'none'; document.body.style.overflow = ''; }
+        tabs.forEach(tab => tab.addEventListener('click', () => activateTab(tab.dataset.tab)));
+        document.querySelectorAll('[data-open-tab]').forEach(button => button.addEventListener('click', () => activateTab(button.dataset.openTab)));
+        const initialTab = @json($errors->any() ? 'survey' : null) || location.hash.replace('#', '');
+        if (['overview', 'survey', 'files', 'history'].includes(initialTab)) activateTab(initialTab);
+
+        window.openDraft = () => { const modal = document.getElementById('draftModal'); const frame = document.getElementById('draftFrame'); if (!modal) return; if (frame && !frame.src) frame.src = @json(route('applications.contract-draft', $application)); modal.hidden = false; document.body.style.overflow = 'hidden'; };
+        window.closeDraft = () => { const modal = document.getElementById('draftModal'); if (modal) modal.hidden = true; document.body.style.overflow = ''; };
+        document.addEventListener('keydown', event => { if (event.key === 'Escape') window.closeDraft(); });
+
+        const baseLayers = () => {
+            const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 20, attribution: '© OpenStreetMap' });
+            const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 20, attribution: 'Tiles © Esri' });
+            const hybrid = L.layerGroup([
+                L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 20, attribution: 'Tiles © Esri' }),
+                L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', { maxZoom: 20 })
+            ]);
+            return { 'Hybrid': hybrid, 'Satellite': satellite, 'OpenStreetMap': osm };
         };
-        document.addEventListener('keydown', function (e) { if (e.key === 'Escape') window.closeHistory(); });
 
-        // Шартнома лойиҳаси — модалда (iframe) очилади, юклаб олинмайди.
-        window.openDraft = function () {
-            const m = document.getElementById('draftModal');
-            const f = document.getElementById('draftFrame');
-            if (!m || !f) return;
-            if (!f.src) { f.src = '{{ route('applications.contract-draft', $application) }}'; }
-            m.style.display = 'flex';
-            document.body.style.overflow = 'hidden';
-        };
-        window.closeDraft = function () {
-            const m = document.getElementById('draftModal');
-            if (m) { m.style.display = 'none'; document.body.style.overflow = ''; }
-        };
-        document.addEventListener('keydown', function (e) { if (e.key === 'Escape') window.closeDraft(); });
-
-        // DataTransfer'ни тозалаш ёрдамчиси.
-        function clearStore(dt) { while (dt.items.length) dt.items.remove(0); }
-
-        // --- Расм юклаш: ҳар бир расм алоҳида катакка; 4 та тўлгач 5-катак очилади ---
-        const photoInput = document.getElementById('photoInput');     // submit учун (photos[])
-        const photoPicker = document.getElementById('photoPicker');   // битта расм танлаш
-        const photoSlots = document.getElementById('photoSlots');
-        const photoHint = document.getElementById('photoHint');
-        const photoStore = new DataTransfer();
-        const MIN_PHOTOS = 4;
-        const MAX_PHOTOS = 10;
-        const hasExistingPhotos = photoSlots && photoSlots.dataset.hasExisting === '1';
-
-        function syncPhotoInput() {
-            if (photoInput) photoInput.files = photoStore.files;
-            if (photoHint) {
-                const n = photoStore.files.length;
-                const ok = n >= MIN_PHOTOS;
-                photoHint.textContent = n === 0
-                    ? 'Камида 4 та расм юкланг'
-                    : (ok ? (n + ' та расм юкланди') : (n + ' та юкланди — яна камида ' + (MIN_PHOTOS - n) + ' та керак'));
-                photoHint.classList.toggle('ok', ok);
-                photoHint.classList.toggle('bad', n > 0 && !ok);
-            }
-        }
-
-        function removePhotoAt(index) {
-            const keep = Array.from(photoStore.files).filter((_, j) => j !== index);
-            clearStore(photoStore);
-            keep.forEach(f => photoStore.items.add(f));
-            renderPhotoSlots();
-        }
-
-        function renderPhotoSlots() {
-            if (!photoSlots) return;
-            const n = photoStore.files.length;
-            // Камида 4 катак; ҳаммаси тўлса — яна битта бўш катак (кўпи MAX_PHOTOS гача).
-            let slots = Math.max(MIN_PHOTOS, n + 1);
-            if (n >= MAX_PHOTOS) slots = MAX_PHOTOS;
-            photoSlots.innerHTML = '';
-            for (let i = 0; i < slots; i++) {
-                const cell = document.createElement('div');
-                cell.className = 'photo-slot';
-                if (i < n) {
-                    cell.classList.add('filled');
-                    cell.style.backgroundImage = 'url(' + URL.createObjectURL(photoStore.files[i]) + ')';
-                    const rm = document.createElement('button');
-                    rm.type = 'button';
-                    rm.className = 'slot-x';
-                    rm.title = 'Ўчириш';
-                    rm.innerHTML = '<i class="fa-solid fa-xmark"></i>';
-                    rm.addEventListener('click', (e) => { e.stopPropagation(); removePhotoAt(i); });
-                    cell.appendChild(rm);
-                } else {
-                    cell.classList.add('empty');
-                    cell.innerHTML = '<span class="slot-plus"><i class="fa-solid fa-plus"></i></span>'
-                        + '<span class="slot-n">' + (i + 1) + '-расм</span>';
-                    cell.addEventListener('click', () => {
-                        if (photoStore.files.length >= MAX_PHOTOS) return;
-                        photoPicker && photoPicker.click();
-                    });
-                }
-                photoSlots.appendChild(cell);
-            }
-            syncPhotoInput();
-        }
-
-        if (photoPicker) {
-            photoPicker.addEventListener('change', function () {
-                const f = this.files && this.files[0];
-                if (f && photoStore.files.length < MAX_PHOTOS) {
-                    const dup = Array.from(photoStore.files).some(x => x.name === f.name && x.size === f.size);
-                    if (!dup) photoStore.items.add(f);
-                }
-                this.value = '';   // кейин шу файлни яна танлаш мумкин бўлсин
-                renderPhotoSlots();
-            });
-        }
-        renderPhotoSlots();
-
-        // --- Ҳужжатлар: ТЎПЛАНИБ боради, ёнига қўшилади ---
-        const docInput = document.getElementById('docInput');
-        const docStore = new DataTransfer();
-
-        function renderDocs() {
-            const list = document.getElementById('docPreview');
-            list.innerHTML = '';
-            Array.from(docStore.files).forEach((f, i) => {
-                const li = document.createElement('li');
-                const span = document.createElement('span');
-                span.innerHTML = '<i class="fa-solid fa-file-lines"></i> ' + f.name;
-                const rm = document.createElement('button');
-                rm.type = 'button';
-                rm.className = 'doc-x';
-                rm.title = 'Ўчириш';
-                rm.innerHTML = '<i class="fa-solid fa-xmark"></i>';
-                rm.addEventListener('click', () => {
-                    const keep = Array.from(docStore.files).filter((_, j) => j !== i);
-                    clearStore(docStore);
-                    keep.forEach(x => docStore.items.add(x));
-                    renderDocs();
-                });
-                li.appendChild(span);
-                li.appendChild(rm);
-                list.appendChild(li);
-            });
-            if (docInput) docInput.files = docStore.files;
-        }
-
-        if (docInput) {
-            docInput.addEventListener('change', function (e) {
-                Array.from(e.target.files).forEach(f => {
-                    const dup = Array.from(docStore.files).some(x => x.name === f.name && x.size === f.size);
-                    if (!dup) docStore.items.add(f);
-                });
-                renderDocs();
-            });
-        }
-
-        // --- Умумий майдон авто-ҳисоб (узунлик × эни) ---
-        const lengthInp = document.getElementById('lengthInp');
-        const widthInp = document.getElementById('widthInp');
-        const totalArea = document.getElementById('totalArea');
-        if (lengthInp && widthInp && totalArea) {
-            const calcArea = () => {
-                const l = parseFloat(lengthInp.value);
-                const w = parseFloat(widthInp.value);
-                totalArea.value = (l > 0 && w > 0) ? (Math.round(l * w * 100) / 100) : '';
-            };
-            lengthInp.addEventListener('input', calcArea);
-            widthInp.addEventListener('input', calcArea);
-        }
-
-        // --- Форма юборишда: камида 4 та расм бўлсин ---
-        const surveyForm = document.getElementById('surveyForm');
-        if (surveyForm) {
-            surveyForm.addEventListener('submit', function (e) {
-                const n = photoStore.files.length;
-                // Янги расм юкланмаган, аммо аввал сақланган бўлса — ўтказамиз.
-                if (n === 0 && hasExistingPhotos) return;
-                if (n < MIN_PHOTOS) {
-                    e.preventDefault();
-                    alert('Камида 4 та расм юкланг (ҳозир ' + n + ' та).');
-                }
-            });
-        }
-
-        // --- Чизиш харитаси (survey формаси) ---
+        const addBaseControl = (map, layers) => { layers.Hybrid.addTo(map); L.control.layers(layers, null, { position:'topright' }).addTo(map); maps.push(map); };
         const drawEl = document.getElementById('drawMap');
-        if (drawEl && window.L && L.Control && L.Control.Draw) {
-            const map = L.map('drawMap').setView([parseFloat(drawEl.dataset.lat), parseFloat(drawEl.dataset.lng)], 17);
-            L.tileLayer(TILES, { maxZoom: 19, attribution: ATTR }).addTo(map);
+        if (drawEl && window.L) {
+            const map = L.map(drawEl, { zoomControl:true }).setView([parseFloat(drawEl.dataset.lat), parseFloat(drawEl.dataset.lng)], 18);
+            addBaseControl(map, baseLayers());
             const drawn = new L.FeatureGroup().addTo(map);
-
-            map.addControl(new L.Control.Draw({
-                draw: {
-                    polygon: { showArea: false, shapeOptions: { color: '#0f7b7b' } },
-                    rectangle: { showArea: false, shapeOptions: { color: '#0f7b7b' } },
-                    polyline: false, circle: false, marker: false, circlemarker: false
-                },
-                edit: { featureGroup: drawn }
-            }));
-
-            function save() {
-                const gj = drawn.toGeoJSON();
+            map.addControl(new L.Control.Draw({ draw:{ polygon:{shapeOptions:{color:'#0f7b7b',weight:3}}, rectangle:{shapeOptions:{color:'#0f7b7b',weight:3}}, polyline:false,circle:false,marker:false,circlemarker:false }, edit:{featureGroup:drawn} }));
+            const syncGeometry = () => {
+                const data = drawn.toGeoJSON();
                 const hint = document.getElementById('drawHint');
-                if (!gj.features.length) {
-                    document.getElementById('geoArea').value = '';
-                    hint.textContent = 'Тўртбурчак/кўпбурчак чизинг';
-                    return;
-                }
-                document.getElementById('geoArea').value = JSON.stringify(gj.features[0].geometry);
-                const c = drawn.getBounds().getCenter();
-                document.getElementById('latInput').value = c.lat.toFixed(7);
-                document.getElementById('lngInput').value = c.lng.toFixed(7);
+                if (!data.features.length) { document.getElementById('geoArea').value=''; hint.textContent='Майдон чегарасини чизинг ёки таҳрирланг'; return; }
+                document.getElementById('geoArea').value = JSON.stringify(data.features[0].geometry);
+                const center = drawn.getBounds().getCenter();
+                document.getElementById('latInput').value = center.lat.toFixed(7);
+                document.getElementById('lngInput').value = center.lng.toFixed(7);
                 hint.textContent = 'Майдон белгиланди ✓';
-            }
-
-            map.on(L.Draw.Event.CREATED, e => { drawn.clearLayers(); drawn.addLayer(e.layer); save(); });
-            map.on(L.Draw.Event.EDITED, save);
-            map.on(L.Draw.Event.DELETED, save);
-            document.getElementById('clearDraw').addEventListener('click', () => { drawn.clearLayers(); save(); });
-
-            // old() қийматни тиклаш (валидация хатоси бўлса)
-            const old = document.getElementById('geoArea').value;
-            if (old) {
-                try {
-                    L.geoJSON({ type: 'Feature', geometry: JSON.parse(old) }).eachLayer(l => drawn.addLayer(l));
-                    map.fitBounds(drawn.getBounds(), { maxZoom: 18 });
-                } catch (e) {}
-            }
-            setTimeout(() => map.invalidateSize(), 200);
+            };
+            map.on(L.Draw.Event.CREATED, event => { drawn.clearLayers(); drawn.addLayer(event.layer); syncGeometry(); });
+            map.on(L.Draw.Event.EDITED, syncGeometry); map.on(L.Draw.Event.DELETED, syncGeometry);
+            document.getElementById('clearDraw')?.addEventListener('click', () => { drawn.clearLayers(); syncGeometry(); });
+            const existing = document.getElementById('geoArea').value;
+            if (existing) try { const layer=L.geoJSON({type:'Feature',geometry:JSON.parse(existing)},{style:{color:'#0f7b7b',weight:3,fillOpacity:.28}}); layer.eachLayer(item=>drawn.addLayer(item)); map.fitBounds(drawn.getBounds(),{maxZoom:19}); } catch (_) {}
         }
 
-        // --- Фақат кўриш харитаси (детал) ---
         const viewEl = document.getElementById('surveyMap');
         if (viewEl && window.L) {
-            const map = L.map('surveyMap', { scrollWheelZoom: false });
-            L.tileLayer(TILES, { maxZoom: 19, attribution: ATTR }).addTo(map);
-            try {
-                const layer = L.geoJSON({ type: 'Feature', geometry: JSON.parse(viewEl.dataset.geo) },
-                    { style: { color: '#0f7b7b', weight: 2, fillOpacity: 0.25 } }).addTo(map);
-                map.fitBounds(layer.getBounds(), { maxZoom: 18 });
-            } catch (e) {
-                map.setView([parseFloat(viewEl.dataset.lat) || 41.311, parseFloat(viewEl.dataset.lng) || 69.279], 16);
-            }
-            setTimeout(() => map.invalidateSize(), 200);
+            const map = L.map(viewEl, { scrollWheelZoom:false }).setView([parseFloat(viewEl.dataset.lat), parseFloat(viewEl.dataset.lng)], 18);
+            addBaseControl(map, baseLayers());
+            if (viewEl.dataset.geo && viewEl.dataset.geo !== 'null') try { const geometry=JSON.parse(viewEl.dataset.geo); const layer=L.geoJSON({type:'Feature',geometry},{style:{color:'#00a39b',weight:3,fillOpacity:.3}}).addTo(map); map.fitBounds(layer.getBounds(),{maxZoom:19}); } catch (_) {}
         }
+
+        const lengthInput = document.getElementById('lengthInp');
+        const widthInput = document.getElementById('widthInp');
+        const totalArea = document.getElementById('totalArea');
+        const calculateArea = () => { const length=parseFloat(lengthInput?.value); const width=parseFloat(widthInput?.value); if (totalArea) totalArea.value = length>0 && width>0 ? Math.round(length*width*100)/100 : ''; };
+        lengthInput?.addEventListener('input', calculateArea); widthInput?.addEventListener('input', calculateArea);
+
+        const photoInput = document.getElementById('photoInput');
+        const photoPicker = document.getElementById('photoPicker');
+        const photoSlots = document.getElementById('photoSlots');
+        const photoHint = document.getElementById('photoHint');
+        const docInput = document.getElementById('docInput');
+        const photoStore = new DataTransfer();
+        const docStore = new DataTransfer();
+        const MIN_PHOTOS=4, MAX_PHOTOS=10, MAX_IMAGE=5*1024*1024, MAX_DOC=10*1024*1024, MAX_TOTAL=120*1024*1024;
+        const hasExistingPhotos = photoSlots?.dataset.hasExisting === '1';
+        const guard = document.getElementById('uploadGuard');
+        const showGuard = message => { if (!guard) return; guard.textContent=message; guard.hidden=!message; };
+        const clearStore = store => { while (store.items.length) store.items.remove(0); };
+        const totalBytes = () => [...photoStore.files,...docStore.files].reduce((sum,file)=>sum+file.size,0);
+        const formatSize = bytes => (bytes/1024/1024).toFixed(1)+' МБ';
+
+        const optimizeImage = file => new Promise(resolve => {
+            if (!file.type.startsWith('image/')) return resolve(file);
+            const image = new Image(); const url=URL.createObjectURL(file);
+            image.onload = () => {
+                const scale=Math.min(1,2200/Math.max(image.width,image.height));
+                if (scale===1 && file.size<=1.5*1024*1024) { URL.revokeObjectURL(url); return resolve(file); }
+                const canvas=document.createElement('canvas'); canvas.width=Math.round(image.width*scale); canvas.height=Math.round(image.height*scale);
+                canvas.getContext('2d').drawImage(image,0,0,canvas.width,canvas.height);
+                canvas.toBlob(blob => { URL.revokeObjectURL(url); if (!blob) return resolve(file); const optimized=new File([blob],file.name.replace(/\.[^.]+$/,'.jpg'),{type:'image/jpeg',lastModified:Date.now()}); resolve(optimized.size<file.size?optimized:file); },'image/jpeg',.82);
+            };
+            image.onerror=()=>{URL.revokeObjectURL(url);resolve(file)}; image.src=url;
+        });
+
+        const renderPhotos = () => {
+            if (!photoSlots) return; const count=photoStore.files.length; const slots=count>=MAX_PHOTOS?MAX_PHOTOS:Math.max(MIN_PHOTOS,count+1); photoSlots.innerHTML='';
+            for(let index=0;index<slots;index++) { const cell=document.createElement('div'); cell.className='photo-slot '+(index<count?'filled':'empty');
+                if(index<count){cell.style.backgroundImage=`url(${URL.createObjectURL(photoStore.files[index])})`;const remove=document.createElement('button');remove.type='button';remove.className='slot-x';remove.innerHTML='<i class="fa-solid fa-xmark"></i>';remove.onclick=()=>{const keep=[...photoStore.files].filter((_,i)=>i!==index);clearStore(photoStore);keep.forEach(file=>photoStore.items.add(file));renderPhotos()};cell.appendChild(remove)}
+                else {cell.innerHTML=`<span class="slot-plus"><i class="fa-solid fa-plus"></i></span><span class="slot-n">${index+1}-расм</span>`;cell.onclick=()=>photoPicker?.click()}
+                photoSlots.appendChild(cell);
+            }
+            photoInput.files=photoStore.files; photoHint.textContent=count?`${count} та расм · ${formatSize(totalBytes())} умумий`:'Камида 4 та расм юкланг · ҳар бири 5 МБ гача';
+        };
+        renderPhotos();
+        photoPicker?.addEventListener('change', async function(){ const source=this.files?.[0]; this.value=''; if(!source||photoStore.files.length>=MAX_PHOTOS)return; showGuard('Расм оптималлаштирилмоқда...'); const file=await optimizeImage(source); if(file.size>MAX_IMAGE){showGuard(`${source.name} оптималлаштирилгандан кейин ҳам 5 МБ дан катта.`);return} if(totalBytes()+file.size>MAX_TOTAL){showGuard('Умумий юклама 120 МБ дан ошмаслиги керак.');return} if(![...photoStore.files].some(item=>item.name===file.name&&item.size===file.size))photoStore.items.add(file); showGuard(source.size>file.size?`Расм ${formatSize(source.size)} дан ${formatSize(file.size)} гача кичрайтирилди.`:''); renderPhotos(); });
+
+        const renderDocs = () => { const list=document.getElementById('docPreview'); if(!list)return; list.innerHTML=''; [...docStore.files].forEach((file,index)=>{const item=document.createElement('li');item.innerHTML=`<span><i class="fa-regular fa-file-lines"></i> ${file.name} · ${formatSize(file.size)}</span>`;const remove=document.createElement('button');remove.type='button';remove.className='doc-x';remove.innerHTML='<i class="fa-solid fa-xmark"></i>';remove.onclick=()=>{const keep=[...docStore.files].filter((_,i)=>i!==index);clearStore(docStore);keep.forEach(entry=>docStore.items.add(entry));renderDocs()};item.appendChild(remove);list.appendChild(item)});docInput.files=docStore.files; };
+        docInput?.addEventListener('change', event => { for(const file of event.target.files){if(file.size>MAX_DOC){showGuard(`${file.name} 10 МБ лимитдан катта.`);continue}if(totalBytes()+file.size>MAX_TOTAL){showGuard('Умумий юклама 120 МБ дан ошмаслиги керак.');break}if(![...docStore.files].some(item=>item.name===file.name&&item.size===file.size))docStore.items.add(file)}renderDocs()});
+
+        document.getElementById('surveyForm')?.addEventListener('submit', event => { const count=photoStore.files.length; if(count===0&&hasExistingPhotos)return; if(count<MIN_PHOTOS){event.preventDefault();showGuard(`Камида 4 та расм юкланг. Ҳозир ${count} та.`);window.scrollTo({top:guard.offsetTop-100,behavior:'smooth'})}else if(totalBytes()>MAX_TOTAL){event.preventDefault();showGuard('Умумий юклама 120 МБ дан ошмаслиги керак.')} });
     });
     </script>
 @endpush

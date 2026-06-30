@@ -36,11 +36,18 @@ class DemoDataSeeder extends Seeder
         $this->workflow = app(ApplicationWorkflowService::class);
         $this->contracts = app(ContractService::class);
 
-        $this->mainDistrict = District::where('name', 'Мирзо-Улуғбек тумани')->first();
-
-        foreach (['moderator', 'officer', 'workgroup', 'deputy', 'head', 'lawyer', 'compliance'] as $key) {
-            $this->staff[$key] = User::where('email', $key.'@test.uz')->first();
+        foreach ([
+            'moderator' => 'moderator@test.uz',
+            'masul' => 'masul@test.uz',
+            'orinbosar' => 'orinbosar@test.uz',
+            'rahbar' => 'rahbar@test.uz',
+        ] as $key => $email) {
+            $this->staff[$key] = User::where('email', $email)->firstOrFail();
         }
+
+        $this->mainDistrict = $this->staff['masul']->district
+            ?? throw new \RuntimeException('masul@test.uz аккаунтига туман бириктирилмаган.');
+
         $this->applicants = User::role(RoleType::Applicant->value)->get();
 
         $objects = $this->seedObjects();
@@ -49,7 +56,7 @@ class DemoDataSeeder extends Seeder
 
         // Тошкент шаҳри кесими бўйича мониторинг жадвали учун — 12 туманга
         // бўйича катта ҳажмдаги намунавий маълумот (аризалар + шартномалар + тўловлар).
-        $this->seedTashkentSpread();
+        $this->seedDistrictData();
     }
 
     /**
@@ -57,14 +64,9 @@ class DemoDataSeeder extends Seeder
      * тарқатиб яратади — мониторинг (ҳудудлар кесими) жадвалини тўлдириш учун.
      * Тарихий тафсилотларсиз, тўғридан-тўғри ҳолат қўйиб яратилади (ҳажм учун).
      */
-    private function seedTashkentSpread(): void
+    private function seedDistrictData(): void
     {
-        $tashkent = \App\Models\Region::where('name', 'Тошкент шаҳри')->first();
-        if (! $tashkent) {
-            return;
-        }
-
-        $districts = District::where('region_id', $tashkent->id)->orderBy('id')->get();
+        $districts = collect([$this->mainDistrict]);
 
         $companyPrefixes = ['SARDOR', 'MEGA BUILD', 'FRESH MARKET', 'CITY CAFE', 'TEXNO MARKET',
             'BARAKA NON', 'MODA STYLE', 'GREEN GARDEN', 'DELTA PHARM', 'SMART OFFICE',
@@ -230,10 +232,10 @@ class DemoDataSeeder extends Seeder
             ->get();
 
         if ($clean->count() >= 1) {
-            $this->contracts->suspend($clean[0], $this->staff['compliance'], 'Объектдан нотўғри фойдаланиш аниқланди — текширув давом этмоқда');
+            $this->contracts->suspend($clean[0], $this->staff['rahbar'], 'Объектдан нотўғри фойдаланиш аниқланди — текширув давом этмоқда');
         }
         if ($clean->count() >= 2) {
-            $this->contracts->terminate($clean[1], $this->staff['lawyer'], 'Тадбиркор аризаси асосида шартнома бекор қилинди');
+            $this->contracts->terminate($clean[1], $this->staff['rahbar'], 'Тадбиркор аризаси асосида шартнома бекор қилинди');
         }
     }
 
@@ -263,11 +265,8 @@ class DemoDataSeeder extends Seeder
 
         $streets = ['Бобур кўчаси', 'Амир Темур шоҳ кўчаси', 'Мустақиллик кўчаси', 'Шаҳрисабз кўчаси', 'Лабзак кўчаси', 'Чилонзор кўчаси'];
         $objects = collect();
-        $otherDistricts = District::where('id', '!=', $this->mainDistrict->id)->get();
-
         foreach ($companies as $i => [$company, $activity, $director]) {
-            // 14 та асосий туманда, қолгани бошқа туманларда.
-            $district = $i < 14 ? $this->mainDistrict : $otherDistricts->random();
+            $district = $this->mainDistrict;
             $owner = $this->applicants->random();
 
             $object = RealEstateObject::create([
@@ -402,9 +401,9 @@ class DemoDataSeeder extends Seeder
         return match ($stage) {
             ApplicationStage::Draft => [$applicant, TransitionAction::Submit, 'Ариза топширилди'],
             ApplicationStage::Moderation => [$this->staff['moderator'], TransitionAction::Forward, 'Ҳужжатлар тўлиқ, мас\'ул ходимга юборилди'],
-            ApplicationStage::ResponsibleReview => [$this->staff['officer'], TransitionAction::Forward, 'Жой ўлчанди, маълумотлар тўлдирилди, ўринбосарга юборилди'],
-            ApplicationStage::DeputyReview => [$this->staff['deputy'], TransitionAction::Forward, 'Кўриб чиқилди, раҳбар тасдиғига юборилди'],
-            ApplicationStage::HeadReview => [$this->staff['head'], TransitionAction::Approve, 'Тасдиқланди, тадбиркор имзосига юборилди'],
+            ApplicationStage::ResponsibleReview => [$this->staff['masul'], TransitionAction::Forward, 'Жой ўлчанди, маълумотлар тўлдирилди, ўринбосарга юборилди'],
+            ApplicationStage::DeputyReview => [$this->staff['orinbosar'], TransitionAction::Forward, 'Кўриб чиқилди, раҳбар тасдиғига юборилди'],
+            ApplicationStage::HeadReview => [$this->staff['rahbar'], TransitionAction::Approve, 'Тасдиқланди, тадбиркор имзосига юборилди'],
             ApplicationStage::AwaitingSignature => [$applicant, TransitionAction::Sign, 'Тадбиркор томонидан имзоланди'],
             default => [$applicant, TransitionAction::Forward, null],
         };
@@ -414,8 +413,8 @@ class DemoDataSeeder extends Seeder
     {
         $actor = match ($stage) {
             ApplicationStage::Moderation => $this->staff['moderator'],
-            ApplicationStage::ResponsibleReview => $this->staff['officer'],
-            ApplicationStage::DeputyReview => $this->staff['deputy'],
+            ApplicationStage::ResponsibleReview => $this->staff['masul'],
+            ApplicationStage::DeputyReview => $this->staff['orinbosar'],
             default => $this->staff['moderator'],
         };
         $reasons = [
@@ -442,7 +441,7 @@ class DemoDataSeeder extends Seeder
         $photos = array_slice($allPhotos, 0, rand(2, 3));
 
         $application->surveys()->create([
-            'surveyed_by' => $this->staff['officer']->id,
+            'surveyed_by' => $this->staff['masul']->id,
             'stage' => ApplicationStage::ResponsibleReview->value,
             'length_m' => $length,
             'width_m' => $width,
