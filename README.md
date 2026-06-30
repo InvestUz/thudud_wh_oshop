@@ -191,3 +191,6 @@ public/css/app.css    # mustaqil UI (CDN'siz)
 `regions, districts, mahallas, objects, object_tenants, applications, application_surveys,
 adjacent_areas, application_transitions, contracts, contract_actions, payment_schedules, invoices`
 (+ `users` kengaytirilgan, + spatie permission jadvallari).
+
+
+applicant7@test.uz -> fresh

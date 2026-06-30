@@ -410,17 +410,45 @@
         const tabs = [...document.querySelectorAll('.detail-tab')];
         const panels = [...document.querySelectorAll('.tab-panel')];
         const maps = [];
+        const mapObservers = [];
         const focusSavedMap = @json((bool) session('focus_survey_map', false));
+        let refreshSequence = 0;
+        const refreshMaps = (focusContent = false) => {
+            const sequence = ++refreshSequence;
+            [0, 80, 240, 520].forEach(delay => setTimeout(() => {
+                if (sequence !== refreshSequence) return;
+                maps.forEach(map => {
+                    const container = map.getContainer();
+                    if (!container.offsetWidth || !container.offsetHeight) return;
+                    map.invalidateSize({pan:false, debounceMoveend:true});
+                    map.eachLayer(layer => { if (typeof layer.redraw === 'function') layer.redraw(); });
+                    if (focusContent && typeof map.__focusContent === 'function') map.__focusContent();
+                });
+            }, delay));
+        };
         const activateTab = name => {
             tabs.forEach(tab => tab.classList.toggle('active', tab.dataset.tab === name));
             panels.forEach(panel => panel.classList.toggle('active', panel.dataset.panel === name));
             history.replaceState(null, '', '#' + name);
-            setTimeout(() => maps.forEach(map => map.invalidateSize()), 80);
+            refreshMaps(name === 'survey');
         };
         tabs.forEach(tab => tab.addEventListener('click', () => activateTab(tab.dataset.tab)));
         document.querySelectorAll('[data-open-tab]').forEach(button => button.addEventListener('click', () => activateTab(button.dataset.openTab)));
         const initialTab = @json($errors->any() ? 'survey' : null) || location.hash.replace('#', '');
         if (['overview', 'survey', 'files', 'history'].includes(initialTab)) activateTab(initialTab);
+        window.addEventListener('hashchange', () => {
+            const tab = location.hash.replace('#', '');
+            if (['overview', 'survey', 'files', 'history'].includes(tab)) activateTab(tab);
+        });
+        window.addEventListener('pageshow', () => {
+            const tab = location.hash.replace('#', '');
+            if (['overview', 'survey', 'files', 'history'].includes(tab)) activateTab(tab);
+            else refreshMaps(false);
+        });
+        window.addEventListener('load', () => refreshMaps(location.hash === '#survey'));
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) refreshMaps(location.hash === '#survey');
+        });
 
         window.openDraft = () => { const modal = document.getElementById('draftModal'); const frame = document.getElementById('draftFrame'); if (!modal) return; if (frame && !frame.src) frame.src = @json(route('applications.contract-draft', $application)); modal.hidden = false; document.body.style.overflow = 'hidden'; };
         window.closeDraft = () => { const modal = document.getElementById('draftModal'); if (modal) modal.hidden = true; document.body.style.overflow = ''; };
@@ -436,7 +464,19 @@
             return { 'Hybrid': hybrid, 'Satellite': satellite, 'OpenStreetMap': osm };
         };
 
-        const addBaseControl = (map, layers) => { layers.Hybrid.addTo(map); L.control.layers(layers, null, { position:'topright' }).addTo(map); maps.push(map); };
+        const addBaseControl = (map, layers) => {
+            layers.Hybrid.addTo(map);
+            L.control.layers(layers, null, { position:'topright' }).addTo(map);
+            maps.push(map);
+            if (window.ResizeObserver) {
+                const observer = new ResizeObserver(entries => {
+                    const box = entries[0]?.contentRect;
+                    if (box?.width > 0 && box?.height > 0) refreshMaps(location.hash === '#survey');
+                });
+                observer.observe(map.getContainer());
+                mapObservers.push(observer);
+            }
+        };
         const drawEl = document.getElementById('drawMap');
         if (drawEl && window.L) {
             const map = L.map(drawEl, { zoomControl:true }).setView([parseFloat(drawEl.dataset.lat), parseFloat(drawEl.dataset.lng)], 18);
@@ -539,6 +579,7 @@
                     drawn.bringToFront();
                     if (focusSavedMap) setMapMessage('Сақланган майдон яқинлаштириб кўрсатилди ✓');
                 };
+                map.__focusContent = focusPolygon;
                 setTimeout(focusPolygon, focusSavedMap ? 280 : 100);
             } catch (_) {}
         }
@@ -547,7 +588,7 @@
         if (viewEl && window.L) {
             const map = L.map(viewEl, { scrollWheelZoom:false }).setView([parseFloat(viewEl.dataset.lat), parseFloat(viewEl.dataset.lng)], 18);
             addBaseControl(map, baseLayers());
-            if (viewEl.dataset.geo && viewEl.dataset.geo !== 'null') try { const geometry=JSON.parse(viewEl.dataset.geo); const layer=L.geoJSON({type:'Feature',geometry},{style:{color:'#00a39b',weight:3,fillOpacity:.3}}).addTo(map); map.fitBounds(layer.getBounds(),{maxZoom:19}); } catch (_) {}
+            if (viewEl.dataset.geo && viewEl.dataset.geo !== 'null') try { const geometry=JSON.parse(viewEl.dataset.geo); const layer=L.geoJSON({type:'Feature',geometry},{style:{color:'#00a39b',weight:3,fillOpacity:.3}}).addTo(map); map.__focusContent=()=>map.fitBounds(layer.getBounds(),{padding:[65,65],maxZoom:20}); map.__focusContent(); } catch (_) {}
         }
 
         const lengthInput = document.getElementById('lengthInp');
