@@ -159,7 +159,7 @@
                                 <span class="map-action-status" id="mapActionStatus">Тайёр</span>
                             </div>
                             <div class="map-actionbar" aria-label="Харита бошқаруви">
-                                <button type="button" class="map-action-btn primary" id="startDraw"><i class="fa-solid fa-draw-polygon"></i><span>Чизиш</span></button>
+                                <button type="button" class="map-action-btn primary draw-attention" id="startDraw"><i class="fa-solid fa-draw-polygon"></i><span>Чизиш</span></button>
                                 <button type="button" class="map-action-btn" id="finishDraw" disabled><i class="fa-solid fa-check"></i><span>Якунлаш</span></button>
                                 <button type="button" class="map-action-btn" id="findLocation"><i class="fa-solid fa-location-crosshairs"></i><span>Жойлашувни топ</span></button>
                                 <button type="button" class="map-action-btn" id="undoPoint" disabled><i class="fa-solid fa-rotate-left"></i><span>Охирги нуқта</span></button>
@@ -354,6 +354,11 @@
         .map-action-btn:hover:not(:disabled) { border-color:var(--teal); color:var(--teal-dark); transform:translateY(-1px); box-shadow:0 3px 9px rgba(15,123,123,.10); }
         .map-action-btn.primary { background:var(--teal); border-color:var(--teal); color:#fff; }
         .map-action-btn.primary.active { background:#084f4f; box-shadow:0 0 0 3px rgba(15,123,123,.16); }
+        .map-action-btn.draw-attention { position:relative; isolation:isolate; animation:drawButtonPulse 1.65s ease-in-out infinite; }
+        .map-action-btn.draw-attention::after { content:""; position:absolute; inset:-5px; z-index:-1; border:2px solid rgba(15,123,123,.52); border-radius:13px; animation:drawButtonRing 1.65s ease-out infinite; pointer-events:none; }
+        @keyframes drawButtonPulse { 0%,100%{transform:scale(1);box-shadow:0 3px 9px rgba(15,123,123,.12)} 45%{transform:scale(1.075);box-shadow:0 7px 20px rgba(15,123,123,.32)} }
+        @keyframes drawButtonRing { 0%{opacity:.8;transform:scale(.9)} 70%,100%{opacity:0;transform:scale(1.18)} }
+        @media (prefers-reduced-motion:reduce) { .map-action-btn.draw-attention,.map-action-btn.draw-attention::after{animation:none} }
         .map-action-btn.danger { color:#c0392b; }
         .map-action-btn:disabled { opacity:.42; cursor:not-allowed; }
         .map-edit { height:430px; background:#dce6ea; }
@@ -473,6 +478,7 @@
 
             startButton?.addEventListener('click', () => {
                 if (polygonDrawer.enabled()) return;
+                startButton.classList.remove('draw-attention');
                 if (drawn.getLayers().length) drawn.clearLayers();
                 syncGeometry();
                 polygonDrawer.enable();
@@ -522,7 +528,7 @@
                 setDrawingState(false);
             });
             const existing = document.getElementById('geoArea').value;
-            if (existing) try { const layer=L.geoJSON({type:'Feature',geometry:JSON.parse(existing)},{style:{color:'#0f7b7b',weight:3,fillOpacity:.28}}); layer.eachLayer(item=>drawn.addLayer(item)); map.fitBounds(drawn.getBounds(),{maxZoom:19}); } catch (_) {}
+            if (existing) try { const layer=L.geoJSON({type:'Feature',geometry:JSON.parse(existing)},{style:{color:'#0f7b7b',weight:3,fillOpacity:.28}}); layer.eachLayer(item=>drawn.addLayer(item)); map.fitBounds(drawn.getBounds(),{maxZoom:19}); startButton?.classList.remove('draw-attention'); } catch (_) {}
         }
 
         const viewEl = document.getElementById('surveyMap');
