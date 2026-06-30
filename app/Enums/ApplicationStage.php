@@ -38,10 +38,10 @@ enum ApplicationStage: string
     {
         return match ($this) {
             self::Draft => 'slate',
-            self::Moderation => 'amber',
-            self::ResponsibleReview => 'blue',
-            self::DeputyReview => 'teal',
-            self::HeadReview => 'violet',
+            self::Moderation,
+            self::ResponsibleReview,
+            self::DeputyReview,
+            self::HeadReview,
             self::AwaitingSignature => 'blue',
             self::Approved => 'green',
             self::Rejected => 'red',

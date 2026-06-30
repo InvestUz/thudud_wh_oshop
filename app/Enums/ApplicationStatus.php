@@ -26,7 +26,7 @@ enum ApplicationStatus: string
     {
         return match ($this) {
             self::Draft => 'slate',
-            self::InProgress => 'amber',
+            self::InProgress => 'blue',
             self::Approved => 'green',
             self::Rejected => 'red',
         };

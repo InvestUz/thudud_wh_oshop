@@ -31,6 +31,8 @@ class ApplicationController extends Controller
     {
         $user = $request->user();
         $role = $user->roleType();
+        $defaultScope = $role === RoleType::Head ? 'all' : 'queue';
+        $scope = $request->input('scope', $defaultScope);
 
         $query = Application::query()->with(['object', 'applicant', 'district', 'adjacentAreas']);
 
@@ -40,7 +42,7 @@ class ApplicationController extends Controller
             $query->forDistrictOf($user);
 
             // Pipeline xodimi uchun standart: o'z bosqichidagi "navbat".
-            if ($user->isPipelineActor() && $request->input('scope', 'queue') === 'queue') {
+            if ($user->isPipelineActor() && $scope === 'queue') {
                 $query->inStages(ApplicationStage::stagesForRole($role));
             }
         }
@@ -75,7 +77,7 @@ class ApplicationController extends Controller
             'role' => $role,
             'statuses' => ApplicationStatus::cases(),
             'stages' => ApplicationStage::cases(),
-            'scope' => $request->input('scope', 'queue'),
+            'scope' => $scope,
             'district' => $request->filled('district_id') ? District::find($request->integer('district_id')) : null,
         ]);
     }

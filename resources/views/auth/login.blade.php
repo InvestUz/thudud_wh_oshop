@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Авторизация — Tutash Hududlar Reestri</title>
-    <link rel="stylesheet" href="{{ asset('css/app.css') }}">
+    <link rel="stylesheet" href="{{ asset('css/app.css') }}?v={{ filemtime(public_path('css/app.css')) }}">
     <style>
         body { background: #dfe8ea; }
         .auth-topbar { height: 30px; background: #3a4750; color: #cbd5e1; font-size: 12px; display: flex; align-items: center; padding: 0 16px; }

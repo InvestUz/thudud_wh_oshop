@@ -139,13 +139,13 @@ table.tbl td.num { font-variant-numeric: tabular-nums; }
     white-space: nowrap; line-height: 1.3;
 }
 .badge::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: .9; }
-.badge-green  { background: #e7f6ec; color: #1a7f43; }
-.badge-amber  { background: #fef4e2; color: #b4690e; }
-.badge-red    { background: #fdecec; color: #c0392b; }
-.badge-blue   { background: #e8f0fe; color: #1a56db; }
-.badge-violet { background: #f1ecfd; color: #6d28d9; }
-.badge-teal   { background: var(--teal-light); color: var(--teal-dark); }
-.badge-slate  { background: #eef1f4; color: #475569; }
+.badge-green  { background: #edf5ef; color: #285f3d; }
+.badge-amber  { background: #f3f1ec; color: #6b5a36; }
+.badge-red    { background: #f8eeee; color: #8b3636; }
+.badge-blue   { background: #edf1f5; color: #2f4858; }
+.badge-violet { background: #edf1f5; color: #2f4858; }
+.badge-teal   { background: #edf1f5; color: #2f4858; }
+.badge-slate  { background: #f0f2f4; color: #52606d; }
 
 /* ---------- Buttons ---------- */
 .btn {
@@ -252,9 +252,9 @@ textarea.inp { resize: vertical; min-height: 84px; }
     display: inline-flex; align-items: center; gap: 6px; font-size: 12px;
     padding: 5px 10px; border-radius: 999px; background: #f1f3f5; color: #94a3b8;
 }
-.stage-flow .step.done { background: var(--teal-light); color: var(--teal-dark); }
-.stage-flow .step.current { background: var(--teal); color: #fff; font-weight: 700; }
-.stage-flow .step.reject { background: #fdecec; color: #c0392b; }
+.stage-flow .step.done { background: #edf1f3; color: #405565; }
+.stage-flow .step.current { background: #2f4858; color: #fff; font-weight: 700; }
+.stage-flow .step.reject { background: #f8eeee; color: #8b3636; }
 .stage-flow .arrow { color: #cbd5e1; }
 
 @media (max-width: 980px) {
