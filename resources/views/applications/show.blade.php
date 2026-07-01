@@ -192,7 +192,17 @@
 
                             <article class="info-card">
                                 <div class="section-title compact"><span class="section-icon"><i class="fa-solid fa-clipboard-check"></i></span><div><h2>Фойдаланиш маълумотлари</h2><p>Майдоннинг ҳолати ва мақсади</p></div></div>
-                                <div class="form-row"><label class="lbl">Кўча тури <span class="req">*</span></label><select class="inp" name="street_type" required><option value="">— Танланг —</option>@foreach(\App\Models\ApplicationSurvey::STREET_TYPES as $type)<option value="{{ $type }}" @selected(old('street_type', $latestSurvey?->street_type) === $type)>{{ $type }}</option>@endforeach</select></div>
+                                <div class="form-row"><label class="lbl">Кўча тури <span class="req">*</span></label><select class="inp" name="street_type" id="streetType" required><option value="">— Танланг —</option>@foreach(\App\Models\ApplicationSurvey::STREET_TYPES as $type)<option value="{{ $type }}" @selected(old('street_type', $latestSurvey?->street_type) === $type)>{{ $type }}</option>@endforeach</select></div>
+                                <div class="form-row" id="contractTypeRow" hidden>
+                                    <label class="lbl">Шартнома тури <span class="req">*</span></label>
+                                    <select class="inp" name="contract_type" id="contractType">
+                                        <option value="">— Танланг —</option>
+                                        @foreach(\App\Models\ApplicationSurvey::CONTRACT_TYPES as $value => $label)
+                                            <option value="{{ $value }}" @selected(old('contract_type', $latestSurvey?->contract_type) === $value)>{{ $label }}</option>
+                                        @endforeach
+                                    </select>
+                                    <div class="help">Гастрономик кўча учун махсус шартнома шаклланади.</div>
+                                </div>
                                 <div class="form-row"><label class="lbl">Фойдаланиш мақсади <span class="req">*</span></label><select class="inp" name="usage_purpose" required><option value="">— Танланг —</option>@foreach(\App\Models\ApplicationSurvey::USAGE_PURPOSES as $purpose)<option value="{{ $purpose }}" @selected(old('usage_purpose', $latestSurvey?->usage_purpose) === $purpose)>{{ $purpose }}</option>@endforeach</select></div>
                                 <div class="form-row"><label class="lbl">Фаолият тури <span class="req">*</span></label><select class="inp" name="activity_type" required><option value="">— Танланг —</option>@foreach(\App\Models\ApplicationSurvey::ACTIVITY_TYPES as $type)<option value="{{ $type }}" @selected(old('activity_type', $latestSurvey?->activity_type) === $type)>{{ $type }}</option>@endforeach</select></div>
                                 <div class="form-row"><label class="lbl">Терраса иншоотлари</label><input class="inp" name="terrace_structures" value="{{ old('terrace_structures', $latestSurvey?->terrace_structures) }}"></div>
@@ -246,7 +256,7 @@
                         <div class="map-edit" id="surveyMap" data-lat="{{ $mapLat }}" data-lng="{{ $mapLng }}" data-geo='@json($latestSurvey->geo_area)'></div>
                     </article>
                     <div class="survey-summary mt-16">
-                        <div><span>Узунлик</span><strong>{{ $latestSurvey->length_m ?? '—' }} м</strong></div><div><span>Эни</span><strong>{{ $latestSurvey->width_m ?? '—' }} м</strong></div><div class="primary"><span>Майдон</span><strong>{{ $latestSurvey->total_area ?? '—' }} м²</strong></div><div><span>Фасад</span><strong>{{ $latestSurvey->facade_length_m ?? '—' }} м</strong></div><div><span>Йўлгача</span><strong>{{ $latestSurvey->distance_to_road_m ?? '—' }} м</strong></div><div><span>Мақсад</span><strong>{{ $latestSurvey->usage_purpose ?? '—' }}</strong></div>
+                        <div><span>Узунлик</span><strong>{{ $latestSurvey->length_m ?? '—' }} м</strong></div><div><span>Эни</span><strong>{{ $latestSurvey->width_m ?? '—' }} м</strong></div><div class="primary"><span>Майдон</span><strong>{{ $latestSurvey->total_area ?? '—' }} м²</strong></div><div><span>Фасад</span><strong>{{ $latestSurvey->facade_length_m ?? '—' }} м</strong></div><div><span>Йўлгача</span><strong>{{ $latestSurvey->distance_to_road_m ?? '—' }} м</strong></div><div><span>{{ $latestSurvey->street_type === \App\Models\ApplicationSurvey::GASTRONOMIC_STREET_TYPE ? 'Шартнома тури' : 'Мақсад' }}</span><strong>{{ $latestSurvey->street_type === \App\Models\ApplicationSurvey::GASTRONOMIC_STREET_TYPE ? (\App\Models\ApplicationSurvey::CONTRACT_TYPES[$latestSurvey->contract_type] ?? 'Танланмаган') : ($latestSurvey->usage_purpose ?? '—') }}</strong></div>
                     </div>
                 @else
                     <div class="empty-state"><i class="fa-solid fa-map-location-dot"></i><h2>Ўлчов ҳали киритилмаган</h2><p>Ариза масъул ходим босқичига ўтганда харита ва ўлчов маълумотлари шу ерда кўринади.</p></div>
@@ -629,6 +639,21 @@
         const historyPanel = document.querySelector('.tab-panel[data-panel="history"]');
         const historyRailMount = document.getElementById('historyRailMount');
         if (historyPanel && historyRailMount) historyRailMount.appendChild(historyPanel);
+
+        const streetType = document.getElementById('streetType');
+        const contractType = document.getElementById('contractType');
+        const contractTypeRow = document.getElementById('contractTypeRow');
+        const gastronomicStreet = @json(\App\Models\ApplicationSurvey::GASTRONOMIC_STREET_TYPE);
+        const syncContractType = () => {
+            const visible = streetType?.value === gastronomicStreet;
+            if (contractTypeRow) contractTypeRow.hidden = !visible;
+            if (contractType) {
+                contractType.required = visible;
+                contractType.disabled = !visible;
+            }
+        };
+        streetType?.addEventListener('change', syncContractType);
+        syncContractType();
         const tabs = [...document.querySelectorAll('.detail-tab')];
         const panels = [...document.querySelectorAll('.tab-panel')];
         const maps = [];

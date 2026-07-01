@@ -34,6 +34,11 @@ class SurveyRequest extends FormRequest
             // Фойдаланиш мақсади ва кўча тури — мажбурий, рўйхатдан танланади.
             'usage_purpose' => ['required', Rule::in(ApplicationSurvey::USAGE_PURPOSES)],
             'street_type' => ['required', Rule::in(ApplicationSurvey::STREET_TYPES)],
+            'contract_type' => [
+                Rule::requiredIf(fn () => $this->input('street_type') === ApplicationSurvey::GASTRONOMIC_STREET_TYPE),
+                'nullable',
+                Rule::in(array_keys(ApplicationSurvey::CONTRACT_TYPES)),
+            ],
             'activity_type' => ['required', Rule::in(ApplicationSurvey::ACTIVITY_TYPES)],
             'terrace_structures' => ['nullable', 'string', 'max:255'],
             'permanent_structures' => ['nullable', 'string', 'max:255'],
@@ -60,6 +65,8 @@ class SurveyRequest extends FormRequest
             'usage_purpose.in' => 'Фойдаланиш мақсадини рўйхатдан танланг.',
             'street_type.required' => 'Кўча турини танланг.',
             'street_type.in' => 'Кўча турини рўйхатдан танланг.',
+            'contract_type.required' => 'Гастрономик кўча учун шартнома турини танланг.',
+            'contract_type.in' => 'Шартнома турини рўйхатдан танланг.',
             'photos.required' => 'Объектнинг камида 4 та расмини юкланг.',
             'photos.min' => 'Камида 4 та расм юкланг.',
             'photos.max' => 'Кўпи билан 10 та расм юклаш мумкин.',

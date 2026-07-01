@@ -70,6 +70,11 @@
         .cd-appendix-sign { display:grid; grid-template-columns:1fr 1fr; border:1px solid #999; }
         .cd-appendix-sign>div { min-height:150px; padding:10px; border-right:1px solid #999; }
         .cd-appendix-sign>div:last-child { border-right:0; }
+        .gas-contract { font-size:14px; line-height:1.55; }
+        .gas-p { margin:0 0 8px; text-align:justify; text-indent:2em; }
+        .gas-center { margin:12px 0; text-align:center; }
+        .gas-table { width:100%; margin:16px 0; border-collapse:collapse; }
+        .gas-table td { padding:8px; vertical-align:top; border:1px solid #222; }
         @media print {
             body { background: #fff; padding: 0; }
             .cd-paper { box-shadow: none; border-radius: 0; max-width: none; }

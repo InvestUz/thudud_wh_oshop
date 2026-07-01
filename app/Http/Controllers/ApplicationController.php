@@ -302,6 +302,9 @@ class ApplicationController extends Controller
             'distance_to_road_m' => $request->validated('distance_to_road_m'),
             'distance_to_sidewalk_m' => $request->validated('distance_to_sidewalk_m'),
             'street_type' => $request->validated('street_type'),
+            'contract_type' => $request->validated('street_type') === \App\Models\ApplicationSurvey::GASTRONOMIC_STREET_TYPE
+                ? $request->validated('contract_type')
+                : null,
             'usage_purpose' => $request->validated('usage_purpose'),
             'activity_type' => $request->validated('activity_type'),
             'terrace_structures' => $request->validated('terrace_structures'),

@@ -30,6 +30,8 @@ class ContractDraftService
 {
     public const TEMPLATE_PATH = 'contract-templates/shartnoma-namuna.txt';
 
+    public const GASTRONOMIC_TEMPLATE_PATH = 'contract-templates/gastranomik_uchun/shartnoma-bir-martalik.txt';
+
     private const FONT = 'Times New Roman';
 
     /** QR rasm o'lchami (DOCX uchun, EMU; 914400 EMU = 1 dyuym ≈ 2.54 sm). */
@@ -53,10 +55,6 @@ class ContractDraftService
     {
         $this->loadRelations($application);
 
-        $data = $this->buildData($application);
-        $ctx = $this->signatureContext($application);
-        $filled = strtr($this->loadTemplate(), $data);
-
         $relative = 'uploads/contracts/draft-'.$application->id.'.docx';
         $absolute = public_path($relative);
 
@@ -65,6 +63,10 @@ class ContractDraftService
             @mkdir($dir, 0775, true);
         }
 
+        $data = $this->buildData($application);
+        $ctx = $this->signatureContext($application);
+        $data['{rahbar}'] = $ctx['head_full_name'];
+        $filled = strtr($this->loadTemplate($application), $data);
         $this->writeDocx($absolute, $filled, $data, $ctx);
 
         return $relative;
@@ -80,9 +82,15 @@ class ContractDraftService
 
         $data = $this->buildData($application);
         $ctx = $this->signatureContext($application);
-        $filled = strtr($this->loadTemplate(), $data);
+        $data['{rahbar}'] = $ctx['head_full_name'];
+        $filled = strtr($this->loadTemplate($application), $data);
 
         return $this->documentHtml($filled, $data, $ctx);
+    }
+
+    private function usesGastronomicTemplate(Application $application): bool
+    {
+        return $application->latestSurvey?->street_type === ApplicationSurvey::GASTRONOMIC_STREET_TYPE;
     }
 
     /** Render uchun kerakli bog'lanishларни (transitions imzо holati учун ҳам) юклайди. */
@@ -177,9 +185,11 @@ class ContractDraftService
     }
 
     /** Shablon matnini o'qiydi (bo'lmasa — minimal zaxira matn). */
-    private function loadTemplate(): string
+    private function loadTemplate(Application $application): string
     {
-        $path = resource_path(self::TEMPLATE_PATH);
+        $path = resource_path($this->usesGastronomicTemplate($application)
+            ? self::GASTRONOMIC_TEMPLATE_PATH
+            : self::TEMPLATE_PATH);
 
         if (is_file($path)) {
             return (string) file_get_contents($path);
@@ -299,6 +309,11 @@ class ContractDraftService
                 $body .= $this->signatureTableDocx($data, $ctx)
                     .'<w:p><w:r><w:br w:type="page"/></w:r></w:p>'
                     .$this->paymentAppendixDocx($data, $ctx).'<w:p/>';
+                continue;
+            }
+
+            if ($line === '[IMZO_BIR_MARTALIK]') {
+                $body .= $this->signatureTableDocx($data, $ctx).'<w:p/>';
                 continue;
             }
 
@@ -492,6 +507,11 @@ class ContractDraftService
 
             if ($line === '[IMZO]') {
                 $body .= $this->signatureHtml($data, $ctx).$this->paymentAppendixHtml($data, $ctx);
+                continue;
+            }
+
+            if ($line === '[IMZO_BIR_MARTALIK]') {
+                $body .= $this->signatureHtml($data, $ctx);
                 continue;
             }
 

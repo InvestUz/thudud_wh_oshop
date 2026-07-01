@@ -13,6 +13,14 @@ class ApplicationSurvey extends Model
     /** Кўча тури — танлаш учун рухсат этилган қийматлар. */
     public const STREET_TYPES = ['Марказий', 'Шох (магистрал)', 'Ички', 'Туризм (гастрономик)'];
 
+    public const GASTRONOMIC_STREET_TYPE = 'Туризм (гастрономик)';
+
+    public const CONTRACT_TYPES = [
+        'tutash_hudud' => 'Туташ ҳудуд',
+        'umumiy_foydalanish' => 'Умумий фойдаланиш',
+        'bir_martalik_tadbir' => 'Бир марталик тадбир',
+    ];
+
     public const ACTIVITY_TYPES = ['Умумий овқатланиш', 'Савдо', 'Хизмат'];
 
     public const PERMIT_STATUSES = ['Мавжуд', 'Мавжуд эмас'];
@@ -29,6 +37,7 @@ class ApplicationSurvey extends Model
         'facade_length_m',
         'terrace_sides',
         'street_type',
+        'contract_type',
         'distance_to_road_m',
         'distance_to_sidewalk_m',
         'usage_purpose',
