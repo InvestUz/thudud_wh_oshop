@@ -170,7 +170,7 @@ class ApplicationController extends Controller
         $application->load([
             'object.district', 'object.region', 'object.mahalla', 'object.tenants',
             'applicant', 'adjacentAreas',
-            'transitions.performer', 'surveys.surveyor', 'contract', 'reviews.reviewer',
+            'transitions.performer', 'surveys.surveyor', 'latestSurvey.surveyor', 'contract', 'reviews.reviewer',
         ]);
 
         $availableActions = $this->workflow->availableActions($application, $user);
@@ -185,7 +185,9 @@ class ApplicationController extends Controller
             'application' => $application,
             'availableActions' => $availableActions,
             'canEditSurvey' => $canEditSurvey,
-            'latestSurvey' => $application->surveys->last(),
+            // HasOne::latestOfMany() barcha foydalanuvchilar uchun aynan bir xil,
+            // eng oxirgi o'lchov va unga biriktirilgan fayllarni qaytaradi.
+            'latestSurvey' => $application->latestSurvey,
             'canOptionalReview' => in_array($user->roleType(), [RoleType::Lawyer, RoleType::Compliance], true)
                 && $application->stage() === ApplicationStage::DeputyReview,
         ]);

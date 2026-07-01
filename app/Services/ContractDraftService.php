@@ -3,9 +3,11 @@
 namespace App\Services;
 
 use App\Enums\ApplicationStage;
+use App\Enums\RoleType;
 use App\Enums\TransitionAction;
 use App\Models\Application;
 use App\Models\ApplicationSurvey;
+use App\Models\User;
 use Carbon\Carbon;
 use Endroid\QrCode\QrCode;
 use Endroid\QrCode\Writer\PngWriter;
@@ -101,19 +103,27 @@ class ContractDraftService
      */
     private function signatureContext(Application $application): array
     {
-        $stage = $application->current_stage;
-        // QR imzolar faqat arizachi yakuniy "Tasdiqlayman" harakatini bajargach chiqadi.
-        $headSigned = $stage === ApplicationStage::Approved;
-        $applicantSigned = $stage === ApplicationStage::Approved;
-
         $transitions = $application->relationLoaded('transitions') ? $application->transitions : collect();
         $approveTr = $transitions->first(fn ($t) => $t->action === TransitionAction::Approve);
         $signTr = $transitions->first(fn ($t) => $t->action === TransitionAction::Sign);
 
+        // Har bir QR aynan o'z tasdiqlash harakati yozilgandan keyin paydo bo'ladi.
+        // Shu tariqa rahbar QR'i tadbirkor imzosini kutish bosqichidayoq ko'rinadi.
+        $headSigned = $approveTr !== null;
+        $applicantSigned = $signTr !== null;
+
         $headDate = $approveTr?->created_at ?? $application->finished_at ?? $application->updated_at ?? now();
         $applicantDate = $signTr?->created_at ?? $application->finished_at ?? $application->updated_at ?? now();
 
-        $headFullName = $approveTr?->performer?->displayName() ?: 'Шакиров Бахтиёр Анварович';
+        // Eski/import qilingan arizalarda approve auditi bo'lmasligi mumkin. Bunday
+        // holatda qattiq yozilgan ism emas, bazadagi faol rahbar olinadi.
+        $headUser = $approveTr?->performer ?: User::query()
+            ->where('is_active', true)
+            ->whereHas('roles', fn ($q) => $q->where('name', RoleType::Head->value))
+            ->where(fn ($q) => $q->whereNull('district_id')->orWhere('district_id', $application->district_id))
+            ->orderByRaw('CASE WHEN district_id = ? THEN 0 ELSE 1 END', [$application->district_id])
+            ->first();
+        $headFullName = $headUser?->displayName() ?: 'Раҳбар';
         $applicantName = $application->applicant?->displayName()
             ?: ($application->object?->director_name ?: 'Тадбиркор');
 
@@ -126,7 +136,9 @@ class ContractDraftService
             'head_signed' => $headSigned,
             'applicant_signed' => $applicantSigned,
             'doc_number' => $regNumber,
+            'application_number' => $application->application_number,
             'head_name' => $this->initials($headFullName),
+            'head_full_name' => $headFullName,
             'head_title' => 'Бошқарув раиси',
             'head_date' => $headDateStr,
             'head_qr' => 'Тошкент шаҳар ҳокимияти | '.$regNumber.'-сон | '.$headDateStr.' | Имзоловчи: '.$headFullName,
@@ -337,7 +349,8 @@ class ContractDraftService
             .$cellP('ҳ/р: ____________________')
             .$cellP(' ');
         if (! empty($ctx['head_signed'])) {
-            $left .= $this->imageDrawingXml($this->qrPng($ctx['head_qr']), 760000)
+            $left .= $cellP('Имзо:')
+                .$this->imageDrawingXml($this->qrPng($ctx['head_qr']), 760000)
                 .$cellP('Е-ИМЗО: '.$ctx['head_name'])
                 .$cellP($ctx['head_title'])
                 .$cellP($ctx['doc_number'].'-сон, '.$ctx['head_date']);
@@ -353,7 +366,8 @@ class ContractDraftService
             .$cellP('ҳ/р: ____________________')
             .$cellP(' ');
         if (! empty($ctx['applicant_signed'])) {
-            $right .= $this->imageDrawingXml($this->qrPng($ctx['applicant_qr']), 760000)
+            $right .= $cellP('Имзо:')
+                .$this->imageDrawingXml($this->qrPng($ctx['applicant_qr']), 760000)
                 .$cellP('Е-ИМЗО: '.$ctx['applicant_name'])
                 .$cellP($ctx['applicant_date']);
         } else {
@@ -373,8 +387,8 @@ class ContractDraftService
     private function paymentAppendixDocx(array $data, array $ctx): string
     {
         $yearly = (float) str_replace(' ', '', $data['{yillik}']);
-        $total = round($yearly * 0.8, 2);
-        $installment = round($total / 4, 2);
+        $total = round($yearly, 2);
+        $installment = round($total / 12, 2);
         $start = now()->addMonth()->startOfMonth()->day(20);
         $money = fn (float $amount) => number_format($amount, 2, '.', ' ').' сўм';
         $p = fn (string $text, bool $bold = false, string $align = 'center') => $this->para($text, $bold, $align, false);
@@ -384,9 +398,11 @@ class ContractDraftService
         };
 
         $rows = '';
-        for ($i = 1; $i <= 4; $i++) {
-            $date = $start->copy()->addMonths(($i - 1) * 3)->format('d.m.Y');
-            $rows .= '<w:tr>'.$cell($i.'.', 850, true).$cell($date, 2100, true).$cell($money($installment), 6050, true).'</w:tr>';
+        for ($i = 1; $i <= 12; $i++) {
+            $date = $start->copy()->addMonths($i - 1)->format('d.m.Y');
+            // Yaxlitlash farqi bo'lsa, oxirgi oyda jami summa bilan tenglashtiriladi.
+            $amount = $i === 12 ? round($total - ($installment * 11), 2) : $installment;
+            $rows .= '<w:tr>'.$cell($i.'.', 850, true).$cell($date, 2100, true).$cell($money($amount), 6050, true).'</w:tr>';
         }
         $rows .= '<w:tr>'.$cell('', 850).$cell('Жами:', 2100, true).$cell($money($total), 6050, true).'</w:tr>';
 
@@ -396,12 +412,12 @@ class ContractDraftService
         $signCell = fn (string $title, string $name) => '<w:tc><w:tcPr><w:tcW w:w="4500" w:type="dxa"/><w:tcMar><w:top w:w="120" w:type="dxa"/><w:bottom w:w="120" w:type="dxa"/></w:tcMar></w:tcPr>'
             .$p($title, true).$p(' ').$p(' ').$p('____________________________').$p($name, true).'</w:tc>';
         $signatures = '<w:tbl><w:tblPr><w:tblW w:w="9000" w:type="dxa"/><w:tblBorders>'.$border.'</w:tblBorders></w:tblPr><w:tr>'
-            .$signCell('КОМПАНИЯ', $ctx['head_name']).$signCell('ИНВЕСТОР', $ctx['applicant_name']).'</w:tr></w:tbl>';
+            .$signCell('КОМПАНИЯ', $ctx['head_full_name']).$signCell('ИНВЕСТОР', $ctx['applicant_name']).'</w:tr></w:tbl>';
 
         return $p(now()->year.'-йил “____” __________даги', true)
-            .$p('ART-'.now()->year.'-A-'.$ctx['doc_number'].'-сонли шартномага', true)
+            .$p($ctx['application_number'].'-сонли шартномага', true)
             .$p('ИЛОВА', true).'<w:p/>'
-            .$p('Йиғимнинг қолган 80% тўлаш', true).$p('РЕЖА ЖАДВАЛИ', true)
+            .$p('Шартноманинг бир йиллик тўлов', true).$p('РЕЖА ЖАДВАЛИ', true)
             .$schedule.'<w:p/><w:p/>'.$signatures;
     }
 
@@ -502,18 +518,19 @@ class ContractDraftService
     private function paymentAppendixHtml(array $data, array $ctx): string
     {
         $yearly = (float) str_replace(' ', '', $data['{yillik}']);
-        $total = round($yearly * .8, 2);
-        $part = round($total / 4, 2);
+        $total = round($yearly, 2);
+        $part = round($total / 12, 2);
         $start = now()->addMonth()->startOfMonth()->day(20);
         $money = fn ($n) => number_format($n, 2, '.', ' ').' сўм';
         $rows = '';
-        for ($i = 1; $i <= 4; $i++) {
-            $rows .= '<tr><th>'.$i.'.</th><th>'.$start->copy()->addMonths(($i - 1) * 3)->format('d.m.Y').'</th><th>'.$money($part).'</th></tr>';
+        for ($i = 1; $i <= 12; $i++) {
+            $amount = $i === 12 ? round($total - ($part * 11), 2) : $part;
+            $rows .= '<tr><th>'.$i.'.</th><th>'.$start->copy()->addMonths($i - 1)->format('d.m.Y').'</th><th>'.$money($amount).'</th></tr>';
         }
 
-        return '<section class="cd-appendix"><h3>'.now()->year.'-йил “____” __________даги<br>ART-'.now()->year.'-A-'.$ctx['doc_number'].'-сонли шартномага<br>ИЛОВА</h3>'
-            .'<h3>Йиғимнинг қолган 80% тўлаш<br>РЕЖА ЖАДВАЛИ</h3><table>'.$rows.'<tr><th></th><th>Жами:</th><th>'.$money($total).'</th></tr></table>'
-            .'<div class="cd-appendix-sign"><div><b>КОМПАНИЯ</b><br><br><br>____________________<br><b>'.$this->esc($ctx['head_name']).'</b></div><div><b>ИНВЕСТОР</b><br><br><br>____________________<br><b>'.$this->esc($ctx['applicant_name']).'</b></div></div></section>';
+        return '<section class="cd-appendix"><h3>'.now()->year.'-йил “____” __________даги<br>'.$this->esc($ctx['application_number']).'-сонли шартномага<br>ИЛОВА</h3>'
+            .'<h3>Шартноманинг бир йиллик тўлов<br>РЕЖА ЖАДВАЛИ</h3><table>'.$rows.'<tr><th></th><th>Жами:</th><th>'.$money($total).'</th></tr></table>'
+            .'<div class="cd-appendix-sign"><div><b>КОМПАНИЯ</b><br><br><br>____________________<br><b>'.$this->esc($ctx['head_full_name']).'</b></div><div><b>ИНВЕСТОР</b><br><br><br>____________________<br><b>'.$this->esc($ctx['applicant_name']).'</b></div></div></section>';
     }
 
     /** Imzolar jadvali — HTML. Ikkala tomon ҳам имзоланса — пастда QR. */
@@ -534,7 +551,8 @@ class ContractDraftService
 
         $leftExtra = '';
         if (! empty($ctx['head_signed'])) {
-            $leftExtra = '<div class="cd-sig-qr">'.$this->qrSvg($ctx['head_qr']).'</div>'
+            $leftExtra = '<div class="cd-sig-row">Имзо:</div>'
+                .'<div class="cd-sig-qr">'.$this->qrSvg($ctx['head_qr']).'</div>'
                 .'<div class="cd-sig-row">Е-ИМЗО: '.$this->esc($ctx['head_name']).'</div>'
                 .'<div class="cd-sig-row">'.$this->esc($ctx['head_title']).'</div>'
                 .'<div class="cd-sig-row">'.$this->esc($ctx['doc_number']).'-сон, '.$this->esc($ctx['head_date']).'</div>';
@@ -547,7 +565,8 @@ class ContractDraftService
 
         $rightExtra = '';
         if (! empty($ctx['applicant_signed'])) {
-            $rightExtra = '<div class="cd-sig-qr">'.$this->qrSvg($ctx['applicant_qr']).'</div>'
+            $rightExtra = '<div class="cd-sig-row">Имзо:</div>'
+                .'<div class="cd-sig-qr">'.$this->qrSvg($ctx['applicant_qr']).'</div>'
                 .'<div class="cd-sig-row">Е-ИМЗО: '.$this->esc($ctx['applicant_name']).'</div>'
                 .'<div class="cd-sig-row">'.$this->esc($ctx['applicant_date']).'</div>';
         } else {

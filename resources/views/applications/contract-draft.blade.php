@@ -62,7 +62,7 @@
         /* Имзо QR (имзоланганда — устун пастида) */
         .cd-sig-qr { margin-top: 8px; }
         .cd-sig-qr svg { width: 96px; height: 96px; display: block; margin: 0 auto; }
-        .cd-appendix { break-before:page; page-break-before:always; padding-top:32px; text-align:center; }
+        .cd-appendix { break-before:page; page-break-before:always; min-height:980px; padding-top:32px; text-align:center; }
         .cd-appendix h3 { margin:12px 0; line-height:1.25; }
         .cd-appendix table { width:100%; margin:18px 0 54px; border-collapse:collapse; }
         .cd-appendix th { border:1px solid #111; padding:7px 10px; }

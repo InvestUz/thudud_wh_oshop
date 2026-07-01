@@ -25,7 +25,9 @@
             && array_key_exists($transition->from_stage->value, $conclusionStages));
     $viewerRole = auth()->user()->roleType();
     $isLeadership = in_array($viewerRole, [RoleType::DeputyHead, RoleType::Head], true);
-    $fileCount = count($latestSurvey?->photos ?? []) + count($latestSurvey?->documents ?? []);
+    $fileCount = count($latestSurvey?->photos ?? [])
+        + count($latestSurvey?->documents ?? [])
+        + ($latestSurvey?->study_report_path ? 1 : 0);
     $mapLat = old('latitude', $latestSurvey?->latitude ?: 41.311081);
     $mapLng = old('longitude', $latestSurvey?->longitude ?: 69.279737);
 @endphp
@@ -229,7 +231,10 @@
                                     <ul id="docPreview" class="doc-list mt-8"></ul>
                                     <label class="lbl mt-16">Ўрганиш далолатномаси <span class="req">*</span></label>
                                     <input class="inp" type="file" name="study_report" accept=".pdf,.doc,.docx" @required(!$latestSurvey?->study_report_path)>
-                                    @if($latestSurvey?->study_report_path)<div class="help"><i class="fa-solid fa-check-circle"></i> Далолатнома юкланган. Янги файл танланмаса, мавжуди сақланади.</div>@endif
+                                    @if($latestSurvey?->study_report_path)
+                                        <div class="help"><i class="fa-solid fa-check-circle"></i> Далолатнома юкланган. Янги файл танланмаса, мавжуди сақланади.</div>
+                                        @include('partials.file-cards', ['files' => [$latestSurvey->study_report_path], 'labels' => ['Ўрганиш далолатномаси']])
+                                    @endif
                                 </div>
                             </div>
                         </article>
@@ -257,6 +262,14 @@
                 <article class="info-card mt-16">
                     <div class="section-title"><span class="section-icon"><i class="fa-regular fa-file-lines"></i></span><div><h2>Ҳужжатлар</h2><p>{{ count($latestSurvey?->documents ?? []) }} та файл</p></div></div>
                     @if(!empty($latestSurvey?->documents))@include('partials.file-cards', ['files' => $latestSurvey->documents])@else<div class="empty compact">Ҳужжатлар ҳали юкланмаган</div>@endif
+                </article>
+                <article class="info-card mt-16">
+                    <div class="section-title"><span class="section-icon"><i class="fa-solid fa-file-signature"></i></span><div><h2>Ўрганиш далолатномаси</h2><p>{{ $latestSurvey?->study_report_path ? '1 та файл' : '0 та файл' }}</p></div></div>
+                    @if($latestSurvey?->study_report_path)
+                        @include('partials.file-cards', ['files' => [$latestSurvey->study_report_path], 'labels' => ['Ўрганиш далолатномаси']])
+                    @else
+                        <div class="empty compact">Далолатнома ҳали юкланмаган</div>
+                    @endif
                 </article>
             </div>
 

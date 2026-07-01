@@ -1,4 +1,4 @@
-{{-- Yuklangan fayllarni chiroyli kartochkalar ko'rinishida ko'rsatish. Kutadi: $files (yo'llar massivi) --}}
+{{-- Kutadi: $files (yo'llar massivi), ixtiyoriy $labels (ko'rinadigan nomlar). --}}
 @php
     $fcIcon = function ($path) {
         $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
@@ -17,7 +17,7 @@
         <a href="{{ asset($f) }}" target="_blank" class="file-card" title="{{ basename($f) }}">
             <span class="fc-icon" style="color:{{ $fcC }}"><i class="fa-solid {{ $fcI }}"></i></span>
             <span class="fc-body">
-                <span class="fc-name">Ҳужжат {{ $i + 1 }}</span>
+                <span class="fc-name">{{ $labels[$i] ?? 'Ҳужжат '.($i + 1) }}</span>
                 <span class="fc-ext">{{ strtoupper(pathinfo($f, PATHINFO_EXTENSION)) }} файл</span>
             </span>
             <span class="fc-open"><i class="fa-solid fa-arrow-up-right-from-square"></i></span>
