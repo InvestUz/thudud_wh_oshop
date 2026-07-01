@@ -31,11 +31,11 @@
 @endphp
 
 @section('content')
+    <a href="{{ route('applications.index') }}" class="show-back"><i class="fa-solid fa-arrow-left"></i> Аризалар рўйхатига қайтиш</a>
     <div class="application-hero">
         <div>
-            <div class="application-kicker">АРИЗА КАРТОЧКАСИ</div>
             <div class="flex items-center gap-12 wrap">
-                <span class="application-number">{{ $application->application_number }}</span>
+                <span class="application-number">Ариза {{ $application->application_number }}</span>
                 <x-badge :color="$application->current_stage->color()" :label="$application->current_stage->label()" />
                 <x-badge :color="$application->status->color()" :label="$application->status->label()" />
             </div>
@@ -43,7 +43,15 @@
                 {{ $application->object?->company_name }} · {{ $application->district?->name }} · {{ optional($application->created_at)->format('d.m.Y') }}
             </div>
         </div>
-        <a href="{{ route('applications.index') }}" class="btn btn-outline"><i class="fa-solid fa-arrow-left"></i> Аризаларга қайтиш</a>
+        <button type="button" class="btn btn-outline" onclick="window.print()"><i class="fa-solid fa-print"></i> Чоп этиш</button>
+    </div>
+
+    <div class="application-facts">
+        <div class="fact-card"><span>Ариза рақами</span><strong>{{ $application->application_number }}</strong><i class="fa-regular fa-file-lines"></i></div>
+        <div class="fact-card"><span>Майдон</span><strong>{{ $latestSurvey?->total_area ?? $application->adjacentAreas->first()?->area_m2 ?? '—' }} м²</strong><i class="fa-solid fa-vector-square"></i></div>
+        <div class="fact-card"><span>Жойлашув</span><strong>{{ $application->district?->name }}</strong><i class="fa-solid fa-location-dot"></i></div>
+        <div class="fact-card fact-status"><span>Ҳолати</span><strong>{{ $application->status->label() }}</strong><i class="fa-regular fa-circle-check"></i></div>
+        <div class="fact-card"><span>Ариза яратилган сана</span><strong>{{ optional($application->created_at)->format('d.m.Y H:i') }}</strong><i class="fa-regular fa-calendar"></i></div>
     </div>
 
     <div class="stage-shell">
@@ -68,13 +76,6 @@
 
     <div class="application-workspace">
         <section class="application-main">
-            <nav class="detail-tabs" aria-label="Ариза бўлимлари">
-                <button type="button" class="detail-tab active" data-tab="overview"><i class="fa-regular fa-rectangle-list"></i> Умумий</button>
-                <button type="button" class="detail-tab" data-tab="survey"><i class="fa-solid fa-map-location-dot"></i> Ўлчов ва харита</button>
-                <button type="button" class="detail-tab" data-tab="files"><i class="fa-regular fa-folder-open"></i> Файллар <span class="tab-count">{{ $fileCount }}</span></button>
-                <button type="button" class="detail-tab" data-tab="history"><i class="fa-solid fa-clock-rotate-left"></i> Тарих <span class="tab-count">{{ $events->count() }}</span></button>
-            </nav>
-
             <div class="tab-panel active" data-panel="overview">
                 <div class="info-grid">
                     <article class="info-card">
@@ -283,12 +284,20 @@
                     @endif
                 </article>
 
+                <div id="historyRailMount"></div>
+
                 @if(count($availableActions) > 0)
                     <article class="decision-card">
                         <div class="decision-head"><span><i class="fa-solid fa-bolt"></i></span><div><h2>Қарор</h2><p>Жорий босқич бўйича ҳаракат</p></div></div>
                         <form method="POST" action="{{ route('applications.transition', $application) }}">@csrf<textarea class="inp" name="comment" placeholder="Изоҳ ёки сабаб...">{{ old('comment') }}</textarea><div class="decision-actions">@foreach($availableActions as $action)<button class="btn {{ $btnClass[$action->color()] ?? 'btn-outline' }} btn-block" type="submit" name="action" value="{{ $action->value }}">{{ $action->buttonLabel() }}</button>@endforeach</div></form>
                     </article>
                 @endif
+
+                <article class="rail-note">
+                    <h2>Изоҳ</h2>
+                    <p>{{ $application->transitions->last()?->comment ?: 'Ариза бўйича қўшимча изоҳ киритилмаган.' }}</p>
+                    <i class="fa-solid fa-quote-right"></i>
+                </article>
             </div>
         </aside>
     </div>
@@ -396,9 +405,173 @@
         .contract-intro { text-align:center; padding:28px 22px 24px; background:linear-gradient(180deg,#f8fbfb 0%,#fff 100%); }.contract-document-icon{width:64px;height:64px;border-radius:18px;display:grid;place-items:center;margin:0 auto 14px;background:var(--teal-light);color:var(--teal-dark);font-size:28px;box-shadow:inset 0 0 0 1px #cbe5e2}.contract-intro h3{margin:0 0 7px;font-size:15px}.contract-intro p{margin:0 auto;color:var(--muted);font-size:12px;line-height:1.55;max-width:290px}.contract-meta{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin-top:16px}.contract-meta span{padding:5px 8px;border:1px solid var(--line);border-radius:7px;background:#fff;color:#64748b;font-size:10px}.contract-actions { display:grid; gap:8px; padding:12px; border-top:1px solid var(--line); }.contract-primary{min-height:43px;font-size:13px}.contract-ready,.contract-empty{text-align:center;padding:38px 22px}.contract-ready>span,.contract-empty>i{width:52px;height:52px;border-radius:50%;display:grid;place-items:center;margin:0 auto 12px;background:#e7f6ec;color:#1a7f43;font-size:22px}.contract-empty>i{background:#eef2f4;color:#64748b}.contract-ready h3,.contract-empty h3{margin:0 0 4px;font-size:14px}.contract-ready p,.contract-empty p{margin:0;color:var(--muted);font-size:12px}
         .decision-card { background:#fff; border:1px solid var(--line); border-radius:14px; padding:16px; box-shadow:var(--shadow); }.decision-head{display:flex;gap:10px;align-items:center;margin-bottom:12px}.decision-head>span{width:34px;height:34px;display:grid;place-items:center;border-radius:9px;background:#fff4df;color:#b4690e}.decision-head h2{margin:0;font-size:14px}.decision-head p{margin:1px 0 0;color:var(--muted);font-size:11px}.decision-card textarea{min-height:70px}.decision-actions{display:grid;gap:7px;margin-top:9px}
         .modal-overlay[hidden]{display:none}.modal-overlay{position:fixed;inset:0;background:#0f172acc;backdrop-filter:blur(4px);z-index:1000;display:flex;align-items:center;justify-content:center;padding:2.5vh 2vw}.modal-panel{background:#fff;border-radius:16px;width:100%;max-height:95vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 30px 80px rgba(2,8,23,.35)}.modal-panel-wide{width:min(1500px,96vw);height:95vh}.modal-head{min-height:62px;padding:11px 16px 11px 20px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:18px}.modal-head h2{font-size:15px;margin:0}.modal-head p{margin:2px 0 0;color:var(--muted);font-size:11px}.modal-head-actions{display:flex;align-items:center;gap:8px}.modal-x{border:0;background:#eef2f4;border-radius:9px;width:34px;height:34px;cursor:pointer}.modal-x:hover{background:#e1e7eb}.modal-body-flush{flex:1;background:#e9eef1}.modal-body-flush iframe{width:100%;height:100%;border:0;background:#fff}
+
+        /* Single-page application record — reference palette and rhythm */
+        :root { --teal:#172033; --teal-dark:#101827; --teal-light:#f1f4f7; --line:#e3e7ec; --shadow:0 1px 3px rgba(15,23,42,.035); }
+        .content { width:auto; max-width:none; margin:0; padding-top:0; }
+        .show-back { display:inline-flex; align-items:center; gap:12px; min-height:58px; color:#273244; font-size:12px; font-weight:700; text-decoration:none; }
+        .show-back:hover { color:#0f172a; }
+        .application-hero { margin:0 -8px 14px; padding:14px 8px 2px; border-top:1px solid var(--line); }
+        .application-number { color:#111827; font-size:26px; }
+        .application-subtitle { color:#536071; }
+        .application-facts { display:grid; grid-template-columns:1.05fr 1fr 1.05fr .9fr 1.25fr; gap:12px; margin:18px 0 14px; }
+        .fact-card { position:relative; min-width:0; min-height:74px; padding:15px 50px 13px 16px; background:#fff; border:1px solid var(--line); border-radius:9px; box-shadow:var(--shadow); }
+        .fact-card span { display:block; margin-bottom:8px; color:#647184; font-size:10px; }
+        .fact-card strong { display:block; overflow:hidden; color:#151d2d; font-size:13px; text-overflow:ellipsis; white-space:nowrap; }
+        .fact-card>i { position:absolute; top:17px; right:14px; width:34px; height:34px; display:grid; place-items:center; color:#172033; background:#f5f7f9; border-radius:10px; }
+        .fact-status strong,.fact-status>i { color:#159a61; }
+        .stage-shell { display:none; }
+        .application-workspace { grid-template-columns:minmax(0,1fr) 360px; gap:14px; }
+        .application-main { display:flex; flex-direction:column; }
+        .tab-panel[data-panel="overview"] { display:contents!important; }
+        .tab-panel[data-panel="overview"]>.info-grid { order:1; }
+        .tab-panel[data-panel="overview"]>.info-card { order:3; margin-top:0; margin-bottom:14px; }
+        .tab-panel[data-panel="survey"] { order:2; }
+        .tab-panel[data-panel="files"] { order:4; }
+        .tab-panel,.tab-panel.active { display:block; animation:none; margin-bottom:14px; }
+        .tab-panel + .tab-panel { padding-top:0; }
+        .info-grid { gap:14px; }
+        .info-card,.decision-card { border-radius:9px; box-shadow:var(--shadow); }
+        .info-card { padding:17px; }
+        .section-icon { color:#172033; background:#f4f6f8; border-radius:9px; }
+        .metric.accent,.survey-summary .primary,.total-area { color:#151d2d!important; background:#f4f6f8!important; border-color:#e5e9ee!important; }
+        .panel-heading { margin:18px 2px 10px; }
+        .contract-card { border-color:var(--line); border-radius:9px; box-shadow:var(--shadow); }
+        .contract-head { color:#172033; background:#fff; border-bottom:1px solid var(--line); }
+        .contract-head span { color:#6b7687; }
+        .contract-document-icon { color:#172033; background:#f4f6f8; box-shadow:inset 0 0 0 1px #e1e6eb; }
+        .contract-primary,.btn-teal { color:#fff; background:#172033; border-color:#172033; }
+        .contract-primary:hover,.btn-teal:hover { background:#0c1322; border-color:#0c1322; }
+        .sticky-stack { top:72px; }
+        .tl-dot.teal { background:#159a61; }
+        /* Dense 12-column dashboard */
+        .application-hero { margin-bottom:6px; padding-top:8px; }
+        .application-facts { gap:8px; margin:9px 0 10px; }
+        .fact-card { min-height:58px; padding:9px 42px 8px 11px; }
+        .fact-card span { margin-bottom:4px; font-size:9px; }
+        .fact-card strong { font-size:11px; }
+        .fact-card>i { top:11px; right:9px; width:29px; height:29px; border-radius:8px; }
+        .application-workspace { grid-template-columns:minmax(0,1fr) 310px; gap:10px; }
+        .application-main { display:grid; grid-template-columns:repeat(12,minmax(0,1fr)); gap:10px; align-items:start; }
+        .tab-panel[data-panel="overview"]>.info-grid { grid-column:span 8; grid-template-columns:1fr 1fr; gap:8px; }
+        .tab-panel[data-panel="overview"]>.info-card { grid-column:span 6; margin:0; }
+        .tab-panel[data-panel="survey"] { grid-column:span 4; margin:0; }
+        .tab-panel[data-panel="survey"]:has(form) { grid-column:1/-1; }
+        .tab-panel[data-panel="files"] { grid-column:1/-1; margin:0; }
+        .tab-panel,.tab-panel.active { margin-bottom:0; }
+        .info-card { padding:11px; }
+        .section-title { gap:7px; margin-bottom:7px; }
+        .section-title p,.panel-heading p { display:none; }
+        .section-title h2,.panel-heading h2 { font-size:12px; }
+        .section-icon { width:28px; height:28px; border-radius:7px; }
+        .detail-list>div { grid-template-columns:105px minmax(0,1fr); gap:8px; padding:5px 0; }
+        .detail-list dt { font-size:9px; }
+        .detail-list dd { font-size:10px; }
+        .panel-heading { margin:0 2px 5px; }
+        .metric-row,.survey-summary { gap:6px; }
+        .metric,.survey-summary>div { padding:7px 9px; }
+        .metric span,.survey-summary span { margin-bottom:2px; font-size:8px; }
+        .metric strong,.survey-summary strong { font-size:10px; }
+        .map-toolbar { padding:7px 9px; }
+        .map-toolbar span { display:none; }
+        .map-edit { height:180px; }
+        .contract-head { padding:10px 12px; }
+        .contract-intro { padding:14px 12px 12px; }
+        .contract-document-icon { width:38px; height:38px; margin-bottom:7px; border-radius:10px; font-size:17px; }
+        .contract-intro h3 { margin-bottom:3px; font-size:12px; }
+        .contract-intro p { display:none; }
+        .contract-meta { margin-top:8px; }
+        .contract-actions { gap:5px; padding:7px; }
+        .contract-primary { min-height:34px; font-size:10px; }
+        .sticky-stack { gap:9px; }
+        .rail-note { min-height:82px; padding:10px; }
+        .rail-note h2 { margin-bottom:6px; font-size:12px; }
+        .rail-note p { padding:8px; font-size:9px; }
+        /* Final reference composition */
+        .application-workspace { grid-template-columns:minmax(0,2fr) 360px; gap:14px; }
+        .application-main { display:flex; flex-direction:column; align-items:stretch; gap:0; width:100%; }
+        .application-main>.tab-panel,
+        .tab-panel[data-panel="overview"]>.info-grid,
+        .tab-panel[data-panel="overview"]>.info-card { width:100%; min-width:0; }
+        .tab-panel[data-panel="overview"]>.info-grid { order:1; display:grid; grid-template-columns:5fr 7fr; gap:14px; }
+        .tab-panel[data-panel="survey"] { order:2; display:grid!important; grid-template-columns:minmax(0,3fr) minmax(150px,1fr); gap:12px; margin:14px 0; }
+        .tab-panel[data-panel="survey"]>.panel-heading { grid-column:1/-1; }
+        .tab-panel[data-panel="survey"]>.map-card { grid-column:1; }
+        .tab-panel[data-panel="survey"]>.survey-summary { grid-column:2; display:flex; flex-direction:column; gap:0; margin:0; border-left:1px solid var(--line); }
+        .tab-panel[data-panel="survey"]>.survey-summary>div { flex:1; padding:8px 12px; background:#fff!important; border:0; border-bottom:1px solid var(--line); border-radius:0; }
+        .tab-panel[data-panel="survey"]>.survey-summary>div:last-child { border-bottom:0; }
+        .tab-panel[data-panel="survey"]:has(form) { display:block!important; }
+        .tab-panel[data-panel="overview"]>.info-card { order:3; margin:0 0 14px; }
+        .tab-panel[data-panel="overview"]>.info-card:first-of-type { display:none; }
+        .tab-panel[data-panel="files"] { order:4; }
+        .info-card { padding:16px; }
+        .section-title { margin-bottom:12px; }
+        .section-title p { display:block; }
+        .section-title h2,.panel-heading h2 { font-size:14px; }
+        .section-icon { width:34px; height:34px; }
+        .detail-list>div { grid-template-columns:125px minmax(0,1fr); padding:7px 0; }
+        .detail-list dt { font-size:11px; }
+        .detail-list dd { font-size:12px; }
+        .map-toolbar { padding:10px 12px; }
+        .map-edit { height:245px; }
+        .survey-summary span { font-size:9px; }
+        .survey-summary strong { font-size:11px; }
+        .tab-panel[data-panel="overview"]>.info-card .survey-summary { grid-template-columns:repeat(6,1fr); }
+        .tab-panel[data-panel="overview"]>.info-card .survey-summary>div { padding:10px; }
+        .photo-thumb { min-height:105px; }
+        .contract-intro { padding:18px 15px 15px; }
+        .contract-intro p { display:block; font-size:10px; }
+        .contract-document-icon { width:48px; height:48px; font-size:20px; }
+        .contract-primary { min-height:38px; font-size:11px; }
+        @media(max-width:1150px){
+            .application-workspace{grid-template-columns:1fr}
+            .application-rail{grid-row:auto}.sticky-stack{position:static}
+        }
+        @media(max-width:760px){
+            .tab-panel[data-panel="overview"]>.info-grid{grid-template-columns:1fr}
+            .tab-panel[data-panel="survey"]{grid-template-columns:1fr}
+            .tab-panel[data-panel="survey"]>.map-card,.tab-panel[data-panel="survey"]>.survey-summary{grid-column:1}
+            .tab-panel[data-panel="survey"]>.survey-summary{display:grid;grid-template-columns:repeat(2,1fr);border-left:0}
+            .tab-panel[data-panel="overview"]>.info-card .survey-summary{grid-template-columns:repeat(2,1fr)}
+        }
+        /* Dashboard teal palette */
+        :root {
+            --teal:#128889;
+            --teal-dark:#006466;
+            --teal-light:#e3f2f2;
+        }
+        .show-back:hover,.section-icon,.application-kicker { color:var(--teal-dark); }
+        .section-icon,.fact-card>i { color:var(--teal-dark); background:var(--teal-light); }
+        .contract-head>i { color:var(--teal-dark); }
+        .contract-document-icon { color:var(--teal-dark); background:var(--teal-light); box-shadow:inset 0 0 0 1px #c5e3e3; }
+        .contract-primary,.btn-teal { color:#fff; background:var(--teal); border-color:var(--teal); }
+        .contract-primary:hover,.btn-teal:hover { background:var(--teal-dark); border-color:var(--teal-dark); }
+        .map-action-btn.primary { background:var(--teal); border-color:var(--teal); }
+        .map-action-btn:hover:not(:disabled) { color:var(--teal-dark); border-color:var(--teal); }
+        .metric.accent,.survey-summary .primary,.total-area { color:var(--teal-dark)!important; background:var(--teal-light)!important; border-color:#c5e3e3!important; }
+        .file-card:hover { border-color:var(--teal); }
+        #historyRailMount .tl-dot.teal,.tl-dot.teal { background:var(--teal); }
+        #historyRailMount>.tab-panel { margin:0; }
+        #historyRailMount .panel-heading { margin:0; padding:15px 16px 10px; background:#fff; border:1px solid var(--line); border-bottom:0; border-radius:9px 9px 0 0; }
+        #historyRailMount .panel-heading p { display:none; }
+        #historyRailMount .info-card { padding:13px 14px; border-radius:0 0 9px 9px; }
+        #historyRailMount .timeline { padding-left:25px; }
+        #historyRailMount .timeline:before { left:9px; }
+        #historyRailMount .tl-item { padding-bottom:16px; }
+        #historyRailMount .tl-dot { left:-25px; width:20px; height:20px; font-size:8px; }
+        #historyRailMount .tl-time { position:absolute; top:2px; right:0; font-size:9px; }
+        #historyRailMount .tl-card { padding:0 82px 0 0; background:transparent; border:0; }
+        #historyRailMount .tl-title { font-size:11px; }
+        #historyRailMount .tl-meta { font-size:9px; }
+        #historyRailMount .tl-comment { margin-top:4px; font-size:9px; }
+        .rail-note { position:relative; min-height:112px; padding:15px 16px; overflow:hidden; background:#fff; border:1px solid var(--line); border-radius:9px; box-shadow:var(--shadow); }
+        .rail-note h2 { margin:0 0 13px; font-size:14px; }
+        .rail-note p { position:relative; z-index:1; margin:0; padding:14px; color:#4c5869; background:#fafbfc; border-radius:8px; font-size:11px; line-height:1.55; }
+        .rail-note>i { position:absolute; right:20px; bottom:12px; color:#e1e6eb; font-size:38px; }
+        @media(max-width:1200px){.application-facts{grid-template-columns:repeat(3,1fr)}}
         @media(max-width:1250px){.application-workspace{grid-template-columns:minmax(0,1fr) 330px}.upload-grid{grid-template-columns:1fr}}
         @media(max-width:980px){.application-workspace{grid-template-columns:1fr}.sticky-stack{position:static}.info-grid{grid-template-columns:1fr}}
-        @media(max-width:620px){.application-hero{align-items:flex-start}.application-hero>.btn{display:none}.detail-tabs{border-radius:10px}.metric-row,.survey-summary{grid-template-columns:1fr 1fr}.photo-slots,.photo-gallery{grid-template-columns:repeat(2,1fr)}.map-edit{height:360px}.detail-list>div{grid-template-columns:1fr}.detail-list dd{text-align:left}.panel-heading{align-items:flex-start}.panel-heading>.btn{padding:8px 10px}.modal-overlay{padding:0}.modal-panel-wide{width:100vw;height:100dvh;max-height:none;border-radius:0}.modal-head p{display:none}.modal-head-actions .btn{display:none}}
+        @media(max-width:620px){.application-facts{grid-template-columns:1fr 1fr}.application-hero{align-items:flex-start}.application-hero>.btn{display:none}.metric-row,.survey-summary{grid-template-columns:1fr 1fr}.photo-slots,.photo-gallery{grid-template-columns:repeat(2,1fr)}.map-edit{height:360px}.detail-list>div{grid-template-columns:1fr}.detail-list dd{text-align:left}.panel-heading{align-items:flex-start}.panel-heading>.btn{padding:8px 10px}.modal-overlay{padding:0}.modal-panel-wide{width:100vw;height:100dvh;max-height:none;border-radius:0}.modal-head p{display:none}.modal-head-actions .btn{display:none}}
     </style>
 @endpush
 
@@ -407,6 +580,9 @@
     <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
     <script>
     document.addEventListener('DOMContentLoaded', () => {
+        const historyPanel = document.querySelector('.tab-panel[data-panel="history"]');
+        const historyRailMount = document.getElementById('historyRailMount');
+        if (historyPanel && historyRailMount) historyRailMount.appendChild(historyPanel);
         const tabs = [...document.querySelectorAll('.detail-tab')];
         const panels = [...document.querySelectorAll('.tab-panel')];
         const maps = [];
@@ -456,11 +632,13 @@
 
         const baseLayers = () => {
             const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 20, attribution: '© OpenStreetMap' });
-            const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 20, attribution: 'Tiles © Esri' });
-            const hybrid = L.layerGroup([
-                L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 20, attribution: 'Tiles © Esri' }),
-                L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', { maxZoom: 20 })
-            ]);
+            const googleOptions = {
+                maxZoom: 21,
+                subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+                attribution: '© Google'
+            };
+            const satellite = L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', googleOptions);
+            const hybrid = L.tileLayer('https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', googleOptions);
             return { 'Hybrid': hybrid, 'Satellite': satellite, 'OpenStreetMap': osm };
         };
 
