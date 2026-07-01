@@ -21,6 +21,8 @@ class SurveyRequest extends FormRequest
         $application = $this->route('application');
         $hasExistingPhotos = $application
             && $application->surveys()->whereNotNull('photos')->exists();
+        $hasStudyReport = $application
+            && $application->surveys()->whereNotNull('study_report_path')->exists();
 
         return [
             'length_m' => ['nullable', 'numeric', 'min:0', 'max:100000'],
@@ -32,10 +34,10 @@ class SurveyRequest extends FormRequest
             // Фойдаланиш мақсади ва кўча тури — мажбурий, рўйхатдан танланади.
             'usage_purpose' => ['required', Rule::in(ApplicationSurvey::USAGE_PURPOSES)],
             'street_type' => ['required', Rule::in(ApplicationSurvey::STREET_TYPES)],
-            'activity_type' => ['nullable', 'string', 'max:255'],
+            'activity_type' => ['required', Rule::in(ApplicationSurvey::ACTIVITY_TYPES)],
             'terrace_structures' => ['nullable', 'string', 'max:255'],
             'permanent_structures' => ['nullable', 'string', 'max:255'],
-            'permit' => ['nullable', 'string', 'max:255'],
+            'permit' => ['required', Rule::in(ApplicationSurvey::PERMIT_STATUSES)],
             'extra_info' => ['nullable', 'string', 'max:2000'],
             // Расм юклаш — камида 4 та (jpg/png/webp), кўпи 10 та.
             'photos' => [$hasExistingPhotos ? 'nullable' : 'required', 'array', 'min:4', 'max:10'],
@@ -43,6 +45,7 @@ class SurveyRequest extends FormRequest
             // "Керакли ҳужжатлар" — ихтиёрий файллар (pdf/расм/офис).
             'documents' => ['nullable', 'array', 'max:10'],
             'documents.*' => ['file', 'mimes:pdf,jpg,jpeg,png,webp,doc,docx,xls,xlsx', 'max:10240'],
+            'study_report' => [$hasStudyReport ? 'nullable' : 'required', 'file', 'mimes:pdf,doc,docx', 'max:10240'],
             // Xaritada belgilangan maydon (GeoJSON matni) + markaz koordinatalari
             'geo_area' => ['nullable', 'string'],
             'latitude' => ['nullable', 'numeric', 'between:-90,90'],
@@ -64,6 +67,8 @@ class SurveyRequest extends FormRequest
             'photos.*.max' => 'Ҳар бир расм 5 МБ дан ошмаслиги керак.',
             'documents.*.mimes' => 'Ҳужжат pdf, расм, Word ёки Excel бўлиши керак.',
             'documents.*.max' => 'Ҳар бир ҳужжат 10 МБ дан ошмаслиги керак.',
+            'study_report.required' => 'Ўрганиш далолатномасини юкланг.',
+            'study_report.mimes' => 'Ўрганиш далолатномаси PDF ёки Word файл бўлиши керак.',
         ];
     }
 

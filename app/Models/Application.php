@@ -83,6 +83,11 @@ class Application extends Model
         return $this->hasOne(Contract::class);
     }
 
+    public function reviews(): HasMany
+    {
+        return $this->hasMany(ApplicationReview::class);
+    }
+
     // --- Scopes ------------------------------------------------------------
 
     /** Hududiy filtr — xodim faqat o'z tumani arizalarini ko'radi. */

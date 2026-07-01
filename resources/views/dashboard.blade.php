@@ -9,6 +9,20 @@
 @endphp
 
 @section('content')
+    @if($signatureRequests->isNotEmpty())
+        <div class="alert alert-success" style="display:flex;justify-content:space-between;align-items:center;gap:16px">
+            <div><strong><i class="fa-solid fa-bell"></i> Раҳбар тасдиқлаган ариза бор</strong><div class="tiny mt-8">Ариза ҳали якуний тасдиқланмаган. Шартнома билан танишиб, ўз тасдиғингизни беринг.</div></div>
+            <div class="flex gap-8 wrap">
+                @foreach($signatureRequests as $item)
+                    <a class="btn btn-outline btn-sm" href="{{ route('applications.show', $item) }}">{{ $item->application_number }} — кўриш</a>
+                    <form method="POST" action="{{ route('applications.transition', $item) }}" onsubmit="return confirm('Аризани якуний тасдиқлайсизми? Бу амалдан кейин ариза тасдиқланган ҳисобланади.')">@csrf<input type="hidden" name="action" value="sign"><button class="btn btn-green btn-sm">Тасдиқлайман</button></form>
+                @endforeach
+            </div>
+        </div>
+    @endif
+    @if($optionalReviewApplications->isNotEmpty())
+        <div class="alert alert-success"><strong><i class="fa-solid fa-scale-balanced"></i> Ихтиёрий хулоса кутаётган аризалар</strong><div class="flex gap-8 wrap mt-8">@foreach($optionalReviewApplications as $item)<a class="btn btn-outline btn-sm" href="{{ route('applications.show', $item) }}">{{ $item->application_number }} — хулоса бериш</a>@endforeach</div></div>
+    @endif
     <div class="stats">
         @foreach($cards as $c)
             <div class="stat">

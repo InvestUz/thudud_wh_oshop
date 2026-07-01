@@ -8,10 +8,14 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class ApplicationSurvey extends Model
 {
     /** Фойдаланиш мақсади — танлаш учун рухсат этилган қийматлар. */
-    public const USAGE_PURPOSES = ['Умумий овқатланиш', 'Савдо сотиқ'];
+    public const USAGE_PURPOSES = ['Умумий овқатланиш', 'Савдо', 'Хизмат'];
 
     /** Кўча тури — танлаш учун рухсат этилган қийматлар. */
-    public const STREET_TYPES = ['Оддий кўча', 'Гастрономик кўча'];
+    public const STREET_TYPES = ['Марказий', 'Шох (магистрал)', 'Ички', 'Туризм (гастрономик)'];
+
+    public const ACTIVITY_TYPES = ['Умумий овқатланиш', 'Савдо', 'Хизмат'];
+
+    public const PERMIT_STATUSES = ['Мавжуд', 'Мавжуд эмас'];
 
     protected $fillable = [
         'application_id',
@@ -37,6 +41,7 @@ class ApplicationSurvey extends Model
         'extra_info',
         'photos',
         'documents',
+        'study_report_path',
         'geo_area',
         'data',
     ];

@@ -38,6 +38,12 @@ class DashboardController extends Controller
             'cards' => $cards,
             'recent' => $recent,
             'role' => $role,
+            'signatureRequests' => $role === RoleType::Applicant
+                ? $user->applications()->where('current_stage', ApplicationStage::AwaitingSignature->value)->with('object')->get()
+                : collect(),
+            'optionalReviewApplications' => in_array($role, [RoleType::Lawyer, RoleType::Compliance], true)
+                ? Application::forDistrictOf($user)->where('current_stage', ApplicationStage::DeputyReview->value)->with('object')->latest()->get()
+                : collect(),
         ]);
     }
 

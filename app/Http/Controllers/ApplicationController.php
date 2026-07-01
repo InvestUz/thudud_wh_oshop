@@ -170,7 +170,7 @@ class ApplicationController extends Controller
         $application->load([
             'object.district', 'object.region', 'object.mahalla', 'object.tenants',
             'applicant', 'adjacentAreas',
-            'transitions.performer', 'surveys.surveyor', 'contract',
+            'transitions.performer', 'surveys.surveyor', 'contract', 'reviews.reviewer',
         ]);
 
         $availableActions = $this->workflow->availableActions($application, $user);
@@ -186,7 +186,32 @@ class ApplicationController extends Controller
             'availableActions' => $availableActions,
             'canEditSurvey' => $canEditSurvey,
             'latestSurvey' => $application->surveys->last(),
+            'canOptionalReview' => in_array($user->roleType(), [RoleType::Lawyer, RoleType::Compliance], true)
+                && $application->stage() === ApplicationStage::DeputyReview,
         ]);
+    }
+
+    public function review(Request $request, Application $application): RedirectResponse
+    {
+        $this->authorize('view', $application);
+        $user = $request->user();
+        abort_unless(
+            in_array($user->roleType(), [RoleType::Lawyer, RoleType::Compliance], true)
+                && $application->stage() === ApplicationStage::DeputyReview,
+            403
+        );
+
+        $validated = $request->validate([
+            'decision' => ['required', 'in:approved,rejected'],
+            'comment' => ['nullable', 'required_if:decision,rejected', 'string', 'max:2000'],
+        ]);
+
+        $application->reviews()->updateOrCreate(
+            ['reviewer_id' => $user->id],
+            ['role' => $user->roleType()->value, 'decision' => $validated['decision'], 'comment' => $validated['comment'] ?? null]
+        );
+
+        return back()->with('status', 'Ихтиёрий хулоса сақланди. Оқим тўхтатилмади.');
     }
 
     /**
@@ -246,6 +271,12 @@ class ApplicationController extends Controller
             $documentPaths = $survey?->documents;
         }
 
+        $studyReportPath = $survey?->study_report_path;
+        if ($request->hasFile('study_report')) {
+            $stored = $this->storeUploads([$request->file('study_report')], 'uploads/documents', 'dalolatnoma_'.$application->id);
+            $studyReportPath = $stored[0] ?? $studyReportPath;
+        }
+
         // Xaritada belgilangan maydon (GeoJSON matni) -> massiv.
         $geoArea = $survey?->geo_area;
         if ($request->filled('geo_area')) {
@@ -279,6 +310,7 @@ class ApplicationController extends Controller
             'longitude' => $request->validated('longitude'),
             'photos' => $photoPaths ?: null,
             'documents' => $documentPaths ?: null,
+            'study_report_path' => $studyReportPath,
             'geo_area' => $geoArea,
         ];
 

@@ -33,7 +33,7 @@ enum TransitionAction: string
             self::Forward => 'Кейингига узатиш',
             self::Return => 'Қайтариш',
             self::Approve => 'Тасдиқлаш',
-            self::Sign => 'Шартномани имзолаш',
+            self::Sign => 'Тасдиқлайман',
             self::Reject => 'Бекор қилиш',
         };
     }

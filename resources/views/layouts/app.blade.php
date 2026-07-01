@@ -37,7 +37,7 @@
                     <span class="nav-ico"><i class="fa-solid fa-plus"></i></span> Ариза яратиш
                 </a>
             @endif
-            @if($isApplicant || $isPipeline)
+            @if($isApplicant || $isPipeline || $canContracts)
                 <a href="{{ route('applications.index') }}" class="{{ request()->routeIs('applications.index') || request()->routeIs('applications.show') ? 'active' : '' }}">
                     <span class="nav-ico"><i class="fa-solid fa-folder-open"></i></span> {{ $isApplicant ? 'Менинг аризаларим' : 'Аризалар' }}
                 </a>

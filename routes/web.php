@@ -37,6 +37,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/applications/{application}/shartnoma-loyihasi', [ApplicationController::class, 'contractDraft'])->name('applications.contract-draft');
     Route::post('/applications/{application}/transition', [ApplicationController::class, 'transition'])->name('applications.transition');
     Route::post('/applications/{application}/survey', [ApplicationController::class, 'storeSurvey'])->name('applications.survey');
+    Route::post('/applications/{application}/review', [ApplicationController::class, 'review'])->name('applications.review');
 
     // Shartnomalar
     Route::get('/contracts', [ContractController::class, 'index'])->name('contracts.index');

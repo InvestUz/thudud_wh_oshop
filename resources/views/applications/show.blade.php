@@ -192,10 +192,10 @@
                                 <div class="section-title compact"><span class="section-icon"><i class="fa-solid fa-clipboard-check"></i></span><div><h2>Фойдаланиш маълумотлари</h2><p>Майдоннинг ҳолати ва мақсади</p></div></div>
                                 <div class="form-row"><label class="lbl">Кўча тури <span class="req">*</span></label><select class="inp" name="street_type" required><option value="">— Танланг —</option>@foreach(\App\Models\ApplicationSurvey::STREET_TYPES as $type)<option value="{{ $type }}" @selected(old('street_type', $latestSurvey?->street_type) === $type)>{{ $type }}</option>@endforeach</select></div>
                                 <div class="form-row"><label class="lbl">Фойдаланиш мақсади <span class="req">*</span></label><select class="inp" name="usage_purpose" required><option value="">— Танланг —</option>@foreach(\App\Models\ApplicationSurvey::USAGE_PURPOSES as $purpose)<option value="{{ $purpose }}" @selected(old('usage_purpose', $latestSurvey?->usage_purpose) === $purpose)>{{ $purpose }}</option>@endforeach</select></div>
-                                <div class="form-row"><label class="lbl">Фаолият тури</label><input class="inp" name="activity_type" value="{{ old('activity_type', $latestSurvey?->activity_type) }}"></div>
+                                <div class="form-row"><label class="lbl">Фаолият тури <span class="req">*</span></label><select class="inp" name="activity_type" required><option value="">— Танланг —</option>@foreach(\App\Models\ApplicationSurvey::ACTIVITY_TYPES as $type)<option value="{{ $type }}" @selected(old('activity_type', $latestSurvey?->activity_type) === $type)>{{ $type }}</option>@endforeach</select></div>
                                 <div class="form-row"><label class="lbl">Терраса иншоотлари</label><input class="inp" name="terrace_structures" value="{{ old('terrace_structures', $latestSurvey?->terrace_structures) }}"></div>
                                 <div class="form-row"><label class="lbl">Доимий иншоотлар</label><input class="inp" name="permanent_structures" value="{{ old('permanent_structures', $latestSurvey?->permanent_structures) }}"></div>
-                                <div class="form-row"><label class="lbl">Рухсат ҳужжати</label><input class="inp" name="permit" value="{{ old('permit', $latestSurvey?->permit) }}"></div>
+                                <div class="form-row"><label class="lbl">Рухсат ҳужжати <span class="req">*</span></label><select class="inp" name="permit" required><option value="">— Танланг —</option>@foreach(\App\Models\ApplicationSurvey::PERMIT_STATUSES as $status)<option value="{{ $status }}" @selected(old('permit', $latestSurvey?->permit) === $status)>{{ $status }}</option>@endforeach</select></div>
                                 <div class="form-row mb-0"><label class="lbl">Қўшимча изоҳ</label><textarea class="inp" name="extra_info">{{ old('extra_info', $latestSurvey?->extra_info) }}</textarea></div>
                             </article>
                         </div>
@@ -205,6 +205,18 @@
                             <div class="upload-grid">
                                 <div>
                                     <label class="lbl">Объект расмлари — камида 4 та <span class="req">*</span></label>
+                                    <div class="help mb-8">1 — Олди, 2 — Орқа, 3 — Чап, 4 — Ўнг томони. Ҳар бир ракурс учун алоҳида расм юкланг.</div>
+                                    @if(!empty($latestSurvey?->photos))
+                                        <div class="photo-gallery saved-photo-gallery mb-8">
+                                            @foreach($latestSurvey->photos as $index => $photo)
+                                                <a href="{{ asset($photo) }}" target="_blank" class="photo-thumb" style="background-image:url('{{ asset($photo) }}')">
+                                                    <b class="saved-view-label">{{ ['Олди','Орқа','Чап','Ўнг'][$index] ?? ($index + 1).'-расм' }}</b>
+                                                    <span><i class="fa-solid fa-up-right-from-square"></i></span>
+                                                </a>
+                                            @endforeach
+                                        </div>
+                                        <div class="help mb-8">Сақланган расмлар. Алмаштириш учун пастда 4 та янги расм танланг.</div>
+                                    @endif
                                     <div id="photoSlots" class="photo-slots" data-has-existing="{{ $latestSurvey && $latestSurvey->photos ? '1' : '0' }}"></div>
                                     <div class="help" id="photoHint">Камида 4 та расм юкланг · ҳар бири 5 МБ гача</div>
                                     <input class="dz-input" type="file" name="photos[]" id="photoInput" accept="image/jpeg,image/png,image/webp" multiple>
@@ -215,6 +227,9 @@
                                     <label class="dropzone dz-doc" for="docInput"><span class="dz-icon"><i class="fa-solid fa-paperclip"></i></span><span class="dz-text">Файлларни танлаш</span><span class="dz-hint">PDF, Word, Excel ёки расм · 10 МБ гача</span></label>
                                     <input class="dz-input" type="file" name="documents[]" id="docInput" accept=".pdf,.doc,.docx,.xls,.xlsx,image/*" multiple>
                                     <ul id="docPreview" class="doc-list mt-8"></ul>
+                                    <label class="lbl mt-16">Ўрганиш далолатномаси <span class="req">*</span></label>
+                                    <input class="inp" type="file" name="study_report" accept=".pdf,.doc,.docx" @required(!$latestSurvey?->study_report_path)>
+                                    @if($latestSurvey?->study_report_path)<div class="help"><i class="fa-solid fa-check-circle"></i> Далолатнома юкланган. Янги файл танланмаса, мавжуди сақланади.</div>@endif
                                 </div>
                             </div>
                         </article>
@@ -286,10 +301,25 @@
 
                 <div id="historyRailMount"></div>
 
+                @if($application->reviews->isNotEmpty() || $canOptionalReview)
+                    <article class="decision-card">
+                        <div class="decision-head"><span><i class="fa-solid fa-scale-balanced"></i></span><div><h2>Юрист / комплаенс хулосаси</h2><p>Ихтиёрий, жараённи тўхтатмайди</p></div></div>
+                        @foreach($application->reviews as $review)
+                            <div class="conclusion mb-8"><strong>{{ $review->reviewer?->displayName() }}</strong> · {{ $review->decision === 'approved' ? 'Тасдиқлади' : 'Рад этишни тавсия қилди' }}@if($review->comment)<div class="tiny muted mt-8">{{ $review->comment }}</div>@endif</div>
+                        @endforeach
+                        @if($canOptionalReview)
+                            <form method="POST" action="{{ route('applications.review', $application) }}">@csrf
+                                <textarea class="inp" name="comment" placeholder="Хулоса ёки рад этиш сабаби..."></textarea>
+                                <div class="decision-actions"><button class="btn btn-green btn-block" name="decision" value="approved">Тасдиқлаш</button><button class="btn btn-red btn-block" name="decision" value="rejected">Рад этишни тавсия қилиш</button></div>
+                            </form>
+                        @endif
+                    </article>
+                @endif
+
                 @if(count($availableActions) > 0)
                     <article class="decision-card">
                         <div class="decision-head"><span><i class="fa-solid fa-bolt"></i></span><div><h2>Қарор</h2><p>Жорий босқич бўйича ҳаракат</p></div></div>
-                        <form method="POST" action="{{ route('applications.transition', $application) }}">@csrf<textarea class="inp" name="comment" placeholder="Изоҳ ёки сабаб...">{{ old('comment') }}</textarea><div class="decision-actions">@foreach($availableActions as $action)<button class="btn {{ $btnClass[$action->color()] ?? 'btn-outline' }} btn-block" type="submit" name="action" value="{{ $action->value }}">{{ $action->buttonLabel() }}</button>@endforeach</div></form>
+                        <form method="POST" action="{{ route('applications.transition', $application) }}" onsubmit="if(event.submitter?.value==='sign') return confirm('Аризани якуний тасдиқлайсизми?')">@csrf<textarea class="inp" name="comment" placeholder="Изоҳ ёки сабаб...">{{ old('comment') }}</textarea><div class="decision-actions">@foreach($availableActions as $action)<button class="btn {{ $btnClass[$action->color()] ?? 'btn-outline' }} btn-block" type="submit" name="action" value="{{ $action->value }}">{{ $action->buttonLabel() }}</button>@endforeach</div></form>
                     </article>
                 @endif
 
@@ -387,6 +417,8 @@
         .photo-slot { position:relative; aspect-ratio:1/1; border-radius:11px; background-size:cover; background-position:center; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; }
         .photo-slot.empty { border:2px dashed #b8d8d5; background:var(--teal-light); color:var(--teal-dark); cursor:pointer; }
         .photo-slot.filled { border:1px solid var(--line); }
+        .slot-view-label { position:absolute; left:7px; bottom:7px; z-index:2; padding:4px 7px; border-radius:6px; background:rgba(15,23,42,.84); color:#fff; font-size:9px; font-weight:800; letter-spacing:.02em; box-shadow:0 2px 6px rgba(15,23,42,.18); }
+        .photo-slot.empty .slot-view-label { position:static; color:var(--teal-dark); background:#fff; box-shadow:none; }
         .slot-x,.doc-x { border:0; cursor:pointer; width:22px; height:22px; display:grid; place-items:center; border-radius:50%; background:#1f2933d9; color:#fff; }
         .slot-x { position:absolute; top:-6px; right:-6px; }
         .slot-plus { font-size:20px; }.slot-n { font-size:10px; }
@@ -395,6 +427,7 @@
         .photo-gallery { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
         .photo-thumb { min-height:145px; border-radius:11px; background-size:cover; background-position:center; position:relative; overflow:hidden; }
         .photo-thumb span { position:absolute; right:8px; bottom:8px; width:29px; height:29px; border-radius:8px; background:#0f172acc; color:#fff; display:grid; place-items:center; }
+        .saved-view-label { position:absolute; left:8px; bottom:8px; padding:5px 8px; border-radius:6px; color:#fff; background:rgba(0,100,102,.9); font-size:10px; }
         .file-cards { display:flex; flex-wrap:wrap; gap:8px; }.file-card { display:flex; align-items:center; gap:10px; padding:10px 12px; border:1px solid var(--line); border-radius:10px; min-width:190px; color:inherit; }.file-card:hover { border-color:var(--teal); text-decoration:none; }.fc-icon { font-size:22px; }.fc-body { display:flex; flex-direction:column; }.fc-name { font-weight:700;font-size:12px;}.fc-ext{font-size:10px;color:var(--muted)}.fc-open{margin-left:auto}
         .empty-state { min-height:390px; display:grid; place-items:center; align-content:center; text-align:center; background:#fff; border:1px dashed #bdc8cf; border-radius:14px; color:var(--muted); padding:40px; }
         .empty-state>i { font-size:42px; color:#9bb8b6; }.empty-state h2{color:var(--ink);margin:13px 0 2px}.empty-state p{max-width:440px;margin:0}.empty.compact{padding:24px}
@@ -803,11 +836,13 @@
             image.onerror=()=>{URL.revokeObjectURL(url);resolve(file)}; image.src=url;
         });
 
+        const requiredViews = ['Олди', 'Орқа', 'Чап', 'Ўнг'];
         const renderPhotos = () => {
             if (!photoSlots) return; const count=photoStore.files.length; const slots=count>=MAX_PHOTOS?MAX_PHOTOS:Math.max(MIN_PHOTOS,count+1); photoSlots.innerHTML='';
             for(let index=0;index<slots;index++) { const cell=document.createElement('div'); cell.className='photo-slot '+(index<count?'filled':'empty');
-                if(index<count){cell.style.backgroundImage=`url(${URL.createObjectURL(photoStore.files[index])})`;const remove=document.createElement('button');remove.type='button';remove.className='slot-x';remove.innerHTML='<i class="fa-solid fa-xmark"></i>';remove.onclick=()=>{const keep=[...photoStore.files].filter((_,i)=>i!==index);clearStore(photoStore);keep.forEach(file=>photoStore.items.add(file));renderPhotos()};cell.appendChild(remove)}
-                else {cell.innerHTML=`<span class="slot-plus"><i class="fa-solid fa-plus"></i></span><span class="slot-n">${index+1}-расм</span>`;cell.onclick=()=>photoPicker?.click()}
+                const viewLabel = requiredViews[index] || `${index+1}-расм`;
+                if(index<count){cell.style.backgroundImage=`url(${URL.createObjectURL(photoStore.files[index])})`;const remove=document.createElement('button');remove.type='button';remove.className='slot-x';remove.innerHTML='<i class="fa-solid fa-xmark"></i>';remove.onclick=()=>{const keep=[...photoStore.files].filter((_,i)=>i!==index);clearStore(photoStore);keep.forEach(file=>photoStore.items.add(file));renderPhotos()};cell.appendChild(remove);cell.insertAdjacentHTML('beforeend',`<span class="slot-view-label">${viewLabel}</span>`)}
+                else {cell.innerHTML=`<span class="slot-plus"><i class="fa-solid fa-plus"></i></span><span class="slot-view-label">${viewLabel}</span>`;cell.onclick=()=>photoPicker?.click()}
                 photoSlots.appendChild(cell);
             }
             photoInput.files=photoStore.files; photoHint.textContent=count?`${count} та расм · ${formatSize(totalBytes())} умумий`:'Камида 4 та расм юкланг · ҳар бири 5 МБ гача';

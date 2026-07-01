@@ -61,6 +61,12 @@ class ApplicationWorkflowService
     ): Application {
         $from = $application->stage();
 
+        if ($from === ApplicationStage::ResponsibleReview
+            && $action === TransitionAction::Forward
+            && ! $application->surveys()->whereNotNull('study_report_path')->exists()) {
+            throw new WorkflowException('Ўринбосарга узатишдан олдин ўрганиш далолатномасини юкланг.');
+        }
+
         if (! $this->canPerform($application, $user, $action)) {
             throw new WorkflowException(
                 "Бу ҳаракатга рухсат йўқ ёки жорий босқичда мумкин эмас: {$action->value}."

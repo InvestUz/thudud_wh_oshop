@@ -102,7 +102,8 @@ class ContractDraftService
     private function signatureContext(Application $application): array
     {
         $stage = $application->current_stage;
-        $headSigned = in_array($stage, [ApplicationStage::AwaitingSignature, ApplicationStage::Approved], true);
+        // QR imzolar faqat arizachi yakuniy "Tasdiqlayman" harakatini bajargach chiqadi.
+        $headSigned = $stage === ApplicationStage::Approved;
         $applicantSigned = $stage === ApplicationStage::Approved;
 
         $transitions = $application->relationLoaded('transitions') ? $application->transitions : collect();
@@ -283,7 +284,9 @@ class ContractDraftService
             $line = rtrim((string) $raw);
 
             if ($line === '[IMZO]') {
-                $body .= $this->signatureTableDocx($data, $ctx).'<w:p/>';
+                $body .= $this->signatureTableDocx($data, $ctx)
+                    .'<w:p><w:r><w:br w:type="page"/></w:r></w:p>'
+                    .$this->paymentAppendixDocx($data, $ctx).'<w:p/>';
                 continue;
             }
 
@@ -367,6 +370,41 @@ class ContractDraftService
             .'</w:tbl>';
     }
 
+    private function paymentAppendixDocx(array $data, array $ctx): string
+    {
+        $yearly = (float) str_replace(' ', '', $data['{yillik}']);
+        $total = round($yearly * 0.8, 2);
+        $installment = round($total / 4, 2);
+        $start = now()->addMonth()->startOfMonth()->day(20);
+        $money = fn (float $amount) => number_format($amount, 2, '.', ' ').' сўм';
+        $p = fn (string $text, bool $bold = false, string $align = 'center') => $this->para($text, $bold, $align, false);
+        $border = '<w:top w:val="single" w:sz="6"/><w:left w:val="single" w:sz="6"/><w:bottom w:val="single" w:sz="6"/><w:right w:val="single" w:sz="6"/><w:insideH w:val="single" w:sz="6"/><w:insideV w:val="single" w:sz="6"/>';
+        $cell = function (string $text, int $width, bool $bold = false) use ($p) {
+            return '<w:tc><w:tcPr><w:tcW w:w="'.$width.'" w:type="dxa"/><w:vAlign w:val="center"/></w:tcPr>'.$p($text, $bold).'</w:tc>';
+        };
+
+        $rows = '';
+        for ($i = 1; $i <= 4; $i++) {
+            $date = $start->copy()->addMonths(($i - 1) * 3)->format('d.m.Y');
+            $rows .= '<w:tr>'.$cell($i.'.', 850, true).$cell($date, 2100, true).$cell($money($installment), 6050, true).'</w:tr>';
+        }
+        $rows .= '<w:tr>'.$cell('', 850).$cell('Жами:', 2100, true).$cell($money($total), 6050, true).'</w:tr>';
+
+        $schedule = '<w:tbl><w:tblPr><w:tblW w:w="9000" w:type="dxa"/><w:tblBorders>'.$border.'</w:tblBorders></w:tblPr>'
+            .'<w:tblGrid><w:gridCol w:w="850"/><w:gridCol w:w="2100"/><w:gridCol w:w="6050"/></w:tblGrid>'.$rows.'</w:tbl>';
+
+        $signCell = fn (string $title, string $name) => '<w:tc><w:tcPr><w:tcW w:w="4500" w:type="dxa"/><w:tcMar><w:top w:w="120" w:type="dxa"/><w:bottom w:w="120" w:type="dxa"/></w:tcMar></w:tcPr>'
+            .$p($title, true).$p(' ').$p(' ').$p('____________________________').$p($name, true).'</w:tc>';
+        $signatures = '<w:tbl><w:tblPr><w:tblW w:w="9000" w:type="dxa"/><w:tblBorders>'.$border.'</w:tblBorders></w:tblPr><w:tr>'
+            .$signCell('КОМПАНИЯ', $ctx['head_name']).$signCell('ИНВЕСТОР', $ctx['applicant_name']).'</w:tr></w:tbl>';
+
+        return $p(now()->year.'-йил “____” __________даги', true)
+            .$p('ART-'.now()->year.'-A-'.$ctx['doc_number'].'-сонли шартномага', true)
+            .$p('ИЛОВА', true).'<w:p/>'
+            .$p('Йиғимнинг қолган 80% тўлаш', true).$p('РЕЖА ЖАДВАЛИ', true)
+            .$schedule.'<w:p/><w:p/>'.$signatures;
+    }
+
     private function noBorders(): string
     {
         return '<w:top w:val="none" w:sz="0" w:space="0"/><w:left w:val="none" w:sz="0" w:space="0"/>'
@@ -437,7 +475,7 @@ class ContractDraftService
             $line = rtrim((string) $raw);
 
             if ($line === '[IMZO]') {
-                $body .= $this->signatureHtml($data, $ctx);
+                $body .= $this->signatureHtml($data, $ctx).$this->paymentAppendixHtml($data, $ctx);
                 continue;
             }
 
@@ -459,6 +497,23 @@ class ContractDraftService
         }
 
         return $body;
+    }
+
+    private function paymentAppendixHtml(array $data, array $ctx): string
+    {
+        $yearly = (float) str_replace(' ', '', $data['{yillik}']);
+        $total = round($yearly * .8, 2);
+        $part = round($total / 4, 2);
+        $start = now()->addMonth()->startOfMonth()->day(20);
+        $money = fn ($n) => number_format($n, 2, '.', ' ').' сўм';
+        $rows = '';
+        for ($i = 1; $i <= 4; $i++) {
+            $rows .= '<tr><th>'.$i.'.</th><th>'.$start->copy()->addMonths(($i - 1) * 3)->format('d.m.Y').'</th><th>'.$money($part).'</th></tr>';
+        }
+
+        return '<section class="cd-appendix"><h3>'.now()->year.'-йил “____” __________даги<br>ART-'.now()->year.'-A-'.$ctx['doc_number'].'-сонли шартномага<br>ИЛОВА</h3>'
+            .'<h3>Йиғимнинг қолган 80% тўлаш<br>РЕЖА ЖАДВАЛИ</h3><table>'.$rows.'<tr><th></th><th>Жами:</th><th>'.$money($total).'</th></tr></table>'
+            .'<div class="cd-appendix-sign"><div><b>КОМПАНИЯ</b><br><br><br>____________________<br><b>'.$this->esc($ctx['head_name']).'</b></div><div><b>ИНВЕСТОР</b><br><br><br>____________________<br><b>'.$this->esc($ctx['applicant_name']).'</b></div></div></section>';
     }
 
     /** Imzolar jadvali — HTML. Ikkala tomon ҳам имзоланса — пастда QR. */
